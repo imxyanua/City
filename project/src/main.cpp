@@ -10,6 +10,7 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cmath>
 #include <filesystem>
@@ -17,6 +18,11 @@
 #include <string>
 
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <array>
+#include <vector>
+#include <cstdlib>
 
 namespace {
 
@@ -156,56 +162,86 @@ int g_offscreenW = 0;
 int g_offscreenH = 0;
 GLuint g_emptyVao = 0;
 
+// Bloom FBOs (quarter-res ping-pong)
+GLuint g_bloomFbo[2]  = {0, 0};
+GLuint g_bloomTex[2]  = {0, 0};
+int    g_bloomW = 0, g_bloomH = 0;
+
+void destroyBloomFbos()
+{
+    for (int i = 0; i < 2; ++i) {
+        if (g_bloomTex[i]) { glDeleteTextures(1, &g_bloomTex[i]); g_bloomTex[i] = 0; }
+        if (g_bloomFbo[i]) { glDeleteFramebuffers(1, &g_bloomFbo[i]); g_bloomFbo[i] = 0; }
+    }
+    g_bloomW = g_bloomH = 0;
+}
+
+void ensureBloomFbos(int w, int h)
+{
+    int bw = w / 4, bh = h / 4;
+    if (bw <= 0 || bh <= 0) return;
+    if (bw == g_bloomW && bh == g_bloomH && g_bloomFbo[0] != 0) return;
+    destroyBloomFbos();
+    for (int i = 0; i < 2; ++i) {
+        glGenFramebuffers(1, &g_bloomFbo[i]);
+        glBindFramebuffer(GL_FRAMEBUFFER, g_bloomFbo[i]);
+        glGenTextures(1, &g_bloomTex[i]);
+        glBindTexture(GL_TEXTURE_2D, g_bloomTex[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, bw, bh, 0, GL_RGBA, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_bloomTex[i], 0);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    g_bloomW = bw;
+    g_bloomH = bh;
+}
+
 void destroyOffscreenFbo()
 {
-    if (g_offscreenDepth != 0) {
-        glDeleteRenderbuffers(1, &g_offscreenDepth);
-        g_offscreenDepth = 0;
-    }
-    if (g_offscreenColor != 0) {
-        glDeleteTextures(1, &g_offscreenColor);
-        g_offscreenColor = 0;
-    }
-    if (g_offscreenFbo != 0) {
-        glDeleteFramebuffers(1, &g_offscreenFbo);
-        g_offscreenFbo = 0;
-    }
-    g_offscreenW = 0;
-    g_offscreenH = 0;
+    if (g_offscreenDepth != 0) { glDeleteTextures(1, &g_offscreenDepth); g_offscreenDepth = 0; }
+    if (g_offscreenColor != 0) { glDeleteTextures(1, &g_offscreenColor); g_offscreenColor = 0; }
+    if (g_offscreenFbo != 0)   { glDeleteFramebuffers(1, &g_offscreenFbo); g_offscreenFbo = 0; }
+    g_offscreenW = g_offscreenH = 0;
+    destroyBloomFbos();
 }
 
 void ensureOffscreenFbo(int w, int h)
 {
-    if (w <= 0 || h <= 0) {
-        return;
-    }
-    if (w == g_offscreenW && h == g_offscreenH && g_offscreenFbo != 0) {
-        return;
-    }
+    if (w <= 0 || h <= 0) return;
+    if (w == g_offscreenW && h == g_offscreenH && g_offscreenFbo != 0) return;
     destroyOffscreenFbo();
     glGenFramebuffers(1, &g_offscreenFbo);
     glBindFramebuffer(GL_FRAMEBUFFER, g_offscreenFbo);
+    // HDR color attachment
     glGenTextures(1, &g_offscreenColor);
     glBindTexture(GL_TEXTURE_2D, g_offscreenColor);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_offscreenColor, 0);
-    glGenRenderbuffers(1, &g_offscreenDepth);
-    glBindRenderbuffer(GL_RENDERBUFFER, g_offscreenDepth);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, g_offscreenDepth);
-    const GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    if (st != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "[FBO] Khong tao duoc framebuffer phu.\n";
+    // Depth attachment
+    glGenTextures(1, &g_offscreenDepth);
+    glBindTexture(GL_TEXTURE_2D, g_offscreenDepth);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, g_offscreenDepth, 0);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cerr << "[FBO] HDR framebuffer incomplete.\n";
         destroyOffscreenFbo();
-        return;
+    } else {
+        g_offscreenW = w;
+        g_offscreenH = h;
     }
-    g_offscreenW = w;
-    g_offscreenH = h;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    ensureBloomFbos(w, h);
 }
 
 void formatHourVi(float hour, char* buf, size_t bufSize)
@@ -273,6 +309,7 @@ void applyTimeOfDayHour(Scene& scene, float hour, float clearCol[3])
     scene.setSkyColor(sky);
     scene.setGroundColor(ground);
     scene.setSunColor(sunCol);
+    scene.setDayFactor(day);
 
     if (day < 0.18f) {
         clearCol[0] = skyNight.x * 0.92f;
@@ -285,6 +322,8 @@ void applyTimeOfDayHour(Scene& scene, float hour, float clearCol[3])
     }
 }
 
+
+
 } // namespace
 
 int main(int argc, char* argv[])
@@ -295,6 +334,7 @@ int main(int argc, char* argv[])
     const std::filesystem::path fragPath = exeDir / "shaders" / "fragment.glsl";
     const std::filesystem::path postVertPath = exeDir / "shaders" / "post.vert";
     const std::filesystem::path postFragPath = exeDir / "shaders" / "post.frag";
+
 
     if (!std::filesystem::exists(assetModel)) {
         std::cerr << "Missing GLB model. Expected:\n  " << assetModel.string()
@@ -370,17 +410,62 @@ int main(int argc, char* argv[])
 
     Shader postShader;
     if (!postShader.loadFromFiles(postVertPath.string(), postFragPath.string())) {
-        std::cerr << "Post shader failed. Paths:\n  " << postVertPath.string() << "\n  " << postFragPath.string() << "\n";
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
-        ImGui::DestroyContext();
-        glfwDestroyWindow(window);
-        glfwTerminate();
-        return 1;
+        std::cerr << "Post shader failed.\n";
+        ImGui_ImplOpenGL3_Shutdown(); ImGui_ImplGlfw_Shutdown(); ImGui::DestroyContext();
+        glfwDestroyWindow(window); glfwTerminate(); return 1;
     }
 
-    glGenVertexArrays(1, &g_emptyVao);
+    // Bloom shaders (use post.vert for fullscreen triangle)
+    const auto bloomExtPath = exeDir / "shaders" / "bloom_extract.frag";
+    const auto bloomBlurPath = exeDir / "shaders" / "bloom_blur.frag";
+    Shader bloomExtractShader, bloomBlurShader;
+    bool hasBloom = bloomExtractShader.loadFromFiles(postVertPath.string(), bloomExtPath.string())
+                 && bloomBlurShader.loadFromFiles(postVertPath.string(), bloomBlurPath.string());
+    if (!hasBloom) {
+        std::cerr << "Bloom shaders failed (non-critical, continuing without bloom).\n";
+    }
 
+    // Rain 3D Shader
+    const auto rainVertPath = exeDir / "shaders" / "rain.vert";
+    const auto rainFragPath = exeDir / "shaders" / "rain.frag";
+    Shader rainShader;
+    rainShader.loadFromFiles(rainVertPath.string(), rainFragPath.string());
+
+    // --- Setup 3D Rain System ---
+    const int numRainDrops = 50000;
+    std::vector<glm::vec3> rainOffsets(numRainDrops);
+    for (int i = 0; i < numRainDrops; ++i) {
+        float x = (static_cast<float>(rand()) / RAND_MAX) * 150.0f - 75.0f;
+        float y = (static_cast<float>(rand()) / RAND_MAX) * 120.0f - 20.0f;
+        float z = (static_cast<float>(rand()) / RAND_MAX) * 150.0f - 75.0f;
+        rainOffsets[i] = glm::vec3(x, y, z);
+    }
+    
+    float rainVertices[] = {
+        0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f
+    };
+    
+    GLuint rainVAO, rainVBO, rainInstanceVBO;
+    glGenVertexArrays(1, &rainVAO);
+    glBindVertexArray(rainVAO);
+    
+    glGenBuffers(1, &rainVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, rainVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(rainVertices), rainVertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    
+    glGenBuffers(1, &rainInstanceVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, rainInstanceVBO);
+    glBufferData(GL_ARRAY_BUFFER, rainOffsets.size() * sizeof(glm::vec3), rainOffsets.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribDivisor(1, 1);
+    
+    glBindVertexArray(0);
+
+    glGenVertexArrays(1, &g_emptyVao);
     Scene scene;
     scene.setAspect(1600.0f / 900.0f);
     if (!scene.loadCityModel(assetModel.string())) {
@@ -404,7 +489,12 @@ int main(int argc, char* argv[])
     bool syncTimeOfDay = true;
     float timeOfDayHour = 12.0f;
     float rainIntensity = 0.0f;
-
+    float bloomThreshold = 1.2f;
+    float bloomIntensity = 0.4f;
+    float godRayIntensity = 0.35f;
+    float colorGradeIntensity = 0.85f;
+    float vignetteIntensity = 0.55f;
+    glm::vec2 windDir = glm::normalize(glm::vec2(-1.0f, -0.2f));
     applyTimeOfDayHour(scene, timeOfDayHour, clearCol);
 
     static bool useGridLayout = false;
@@ -483,24 +573,41 @@ int main(int argc, char* argv[])
                     scene.setLightDir(glm::vec3(lx, ly, lz));
                 }
                 ImGui::EndDisabled();
+
             }
 
             if (ImGui::CollapsingHeader(u8"Sương mù", ImGuiTreeNodeFlags_DefaultOpen)) {
                 float fogD = scene.fogDensity();
-                if (ImGui::SliderFloat(u8"Mật độ (0 = tắt)", &fogD, 0.0f, 1.2f)) {
-                    scene.setFogDensity(fogD);
-                }
+                if (ImGui::SliderFloat(u8"Mật độ (0 = tắt)", &fogD, 0.0f, 1.2f)) scene.setFogDensity(fogD);
+                
+                float fBase = scene.fogBaseHeight();
+                if (ImGui::SliderFloat(u8"Độ cao nền", &fBase, -10.0f, 50.0f)) scene.setFogBaseHeight(fBase);
+                
+                float fFalloff = scene.fogHeightFalloff();
+                if (ImGui::SliderFloat(u8"Giảm theo độ cao", &fFalloff, 0.0f, 0.2f)) scene.setFogHeightFalloff(fFalloff);
+
                 glm::vec3 fc = scene.fogColor();
                 float fc3[3] = {fc.x, fc.y, fc.z};
-                if (ImGui::ColorEdit3(u8"Màu sương", fc3)) {
-                    scene.setFogColor(glm::vec3(fc3[0], fc3[1], fc3[2]));
-                }
-                ImGui::TextWrapped(u8"Sương theo khoảng cách từ camera; tăng mật độ để phố mờ dần.");
+                if (ImGui::ColorEdit3(u8"Màu sương", fc3)) scene.setFogColor(glm::vec3(fc3[0], fc3[1], fc3[2]));
             }
 
-            if (ImGui::CollapsingHeader(u8"Mưa", ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::SliderFloat(u8"Cường độ mưa", &rainIntensity, 0.0f, 1.0f);
-                ImGui::TextWrapped(u8"Vệt mưa phủ lên khung hình (hậu kỳ). 0 = trời quang.");
+            if (ImGui::CollapsingHeader(u8"Mưa & Ướt", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (ImGui::SliderFloat(u8"Cường độ mưa", &rainIntensity, 0.0f, 1.0f)) scene.setWetness(rainIntensity);
+                ImGui::SliderFloat2(u8"Hướng gió", &windDir.x, -1.0f, 1.0f);
+                windDir = glm::normalize(windDir + glm::vec2(1e-5f));
+            }
+
+            if (ImGui::CollapsingHeader(u8"Hậu kỳ (Post-processing)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::SliderFloat(u8"Bloom Threshold", &bloomThreshold, 0.5f, 5.0f);
+                ImGui::SliderFloat(u8"Bloom Intensity", &bloomIntensity, 0.0f, 2.0f);
+                ImGui::SliderFloat(u8"God Ray (Sun)", &godRayIntensity, 0.0f, 1.5f);
+                ImGui::SliderFloat(u8"Color Grade (Lạnh)", &colorGradeIntensity, 0.0f, 1.0f);
+                ImGui::SliderFloat(u8"Vignette (Viền tối)", &vignetteIntensity, 0.0f, 1.0f);
+            }
+            
+            if (ImGui::CollapsingHeader(u8"Tòa nhà (Đêm)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                float em = scene.windowEmissive();
+                if (ImGui::SliderFloat(u8"Độ sáng cửa sổ", &em, 0.0f, 5.0f)) scene.setWindowEmissive(em);
             }
 
             if (ImGui::CollapsingHeader(u8"Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -610,7 +717,63 @@ int main(int argc, char* argv[])
             glViewport(0, 0, fbW, fbH);
             glClearColor(clearCol[0], clearCol[1], clearCol[2], 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            shader.use();
+            shader.setFloat("uTime", static_cast<float>(now));
             scene.render(shader, camera);
+
+            // 3D GPU Rain
+            if (rainIntensity > 0.001f) {
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE); // Additive blending
+                glDepthMask(GL_FALSE); // Read-only depth
+                
+                rainShader.use();
+                rainShader.setMat4("uProjection", camera.projectionMatrix(static_cast<float>(fbW)/std::max(1, fbH)));
+                rainShader.setMat4("uView", camera.viewMatrix());
+                rainShader.setVec3("uCameraPos", camera.position());
+                rainShader.setFloat("uTime", static_cast<float>(now));
+                rainShader.setVec2("uWindDir", windDir);
+                rainShader.setFloat("uFallSpeed", 35.0f);
+                rainShader.setFloat("uRainLength", 1.5f + rainIntensity * 3.0f);
+                rainShader.setFloat("uRainIntensity", rainIntensity);
+                
+                glBindVertexArray(rainVAO);
+                int dropCount = static_cast<int>(rainIntensity * numRainDrops);
+                glDrawArraysInstanced(GL_LINES, 0, 2, dropCount);
+                glBindVertexArray(0);
+                
+                glDepthMask(GL_TRUE);
+                glDisable(GL_BLEND);
+            }
+
+            // Bloom passes
+            if (hasBloom && bloomIntensity > 0.001f && g_bloomFbo[0] != 0) {
+                glDisable(GL_DEPTH_TEST);
+                // Extract bright areas
+                glBindFramebuffer(GL_FRAMEBUFFER, g_bloomFbo[0]);
+                glViewport(0, 0, g_bloomW, g_bloomH);
+                bloomExtractShader.use();
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, g_offscreenColor);
+                bloomExtractShader.setInt("uScene", 0);
+                bloomExtractShader.setFloat("uThreshold", bloomThreshold);
+                glBindVertexArray(g_emptyVao);
+                glDrawArrays(GL_TRIANGLES, 0, 3);
+                
+                // Blur (Ping-pong 4 times)
+                bloomBlurShader.use();
+                bloomBlurShader.setInt("uInput", 0);
+                for (int i = 0; i < 4; ++i) {
+                    int ping = i % 2;
+                    int pong = (i + 1) % 2;
+                    glBindFramebuffer(GL_FRAMEBUFFER, g_bloomFbo[pong]);
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, g_bloomTex[ping]);
+                    bloomBlurShader.setVec2("uDirection", ping == 0 ? glm::vec2(1.0f / g_bloomW, 0.0f) : glm::vec2(0.0f, 1.0f / g_bloomH));
+                    glDrawArrays(GL_TRIANGLES, 0, 3);
+                }
+                glEnable(GL_DEPTH_TEST);
+            }
 
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glViewport(0, 0, fbW, fbH);
@@ -619,9 +782,43 @@ int main(int argc, char* argv[])
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, g_offscreenColor);
             postShader.setInt("uScene", 0);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, g_offscreenDepth);
+            postShader.setInt("uDepth", 1);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, g_bloomTex[0]);
+            postShader.setInt("uBloom", 2);
+
             postShader.setVec2("uResolution", glm::vec2(static_cast<float>(fbW), static_cast<float>(fbH)));
             postShader.setFloat("uTime", static_cast<float>(now));
             postShader.setFloat("uRainIntensity", rainIntensity);
+            const float aspect = static_cast<float>(fbW) / static_cast<float>(std::max(1, fbH));
+            const glm::mat4 proj = camera.projectionMatrix(aspect);
+            const glm::mat4 view = camera.viewMatrix();
+            postShader.setMat4("uInvProj", glm::inverse(proj));
+            postShader.setMat4("uInvView", glm::inverse(view));
+            postShader.setFloat("uNear", camera.nearPlane());
+            postShader.setFloat("uFar", camera.farPlane());
+            
+            glm::vec3 sunDir = glm::normalize(-scene.lightDir());
+            const float sunElev = sunDir.y;
+            const float sunIntensity = glm::clamp((sunElev + 0.07f) / 0.24f, 0.f, 1.f);
+            postShader.setVec3("uSunDir", sunDir);
+            postShader.setFloat("uSunIntensity", sunIntensity);
+
+            // Set cinematic uniforms
+            postShader.setFloat("uBloomIntensity", bloomIntensity);
+            postShader.setFloat("uGodRayIntensity", godRayIntensity);
+            postShader.setFloat("uColorGradeIntensity", colorGradeIntensity);
+            postShader.setFloat("uVignetteIntensity", vignetteIntensity);
+            postShader.setVec2("uWindDir", windDir);
+            
+            // Calculate screen space sun pos for god rays
+            glm::vec4 sunClip = proj * view * glm::vec4(sunDir * 1000.0f, 1.0f);
+            glm::vec2 sunNdc = glm::vec2(sunClip.x, sunClip.y) / sunClip.w;
+            glm::vec2 sunScreen = (sunNdc * 0.5f + 0.5f);
+            postShader.setVec2("uSunScreenPos", sunScreen);
+
             glBindVertexArray(g_emptyVao);
             glDrawArrays(GL_TRIANGLES, 0, 3);
             glBindVertexArray(0);

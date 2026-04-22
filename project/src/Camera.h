@@ -26,6 +26,9 @@ public:
     void setMouseSensitivity(float s) { m_mouseSensitivity = std::max(0.01f, s); }
     void setFovDegrees(float f);
 
+    float nearPlane() const { return m_near; }
+    float farPlane() const { return m_far; }
+
     enum Direction { Forward, Backward, Left, Right, Up, Down };
 
 private:

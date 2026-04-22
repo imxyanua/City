@@ -8,51 +8,70 @@
 
 #include <glm/glm.hpp>
 
+#include <string>
 #include <vector>
 
-// Owns the shared city model, lighting parameters, and per-instance transforms.
 class Scene {
 public:
     bool loadCityModel(const std::string& glbPath);
     void setInstanceTransforms(std::vector<glm::mat4> transforms);
-
     void setAspect(float aspect) { m_aspect = aspect; }
-
     void render(Shader& shader, const Camera& camera) const;
 
-    Model& cityModel() { return m_cityModel; }
+    Model&       cityModel()       { return m_cityModel; }
     const Model& cityModel() const { return m_cityModel; }
 
-    float exposure() const { return m_exposure; }
-    void setExposure(float v) { m_exposure = std::max(0.05f, v); }
+    // Exposure
+    float exposure() const            { return m_exposure; }
+    void  setExposure(float v)        { m_exposure = std::max(0.05f, v); }
 
-    glm::vec3 skyColor() const { return m_skyColor; }
-    void setSkyColor(const glm::vec3& c) { m_skyColor = c; }
-    glm::vec3 groundColor() const { return m_groundColor; }
-    void setGroundColor(const glm::vec3& c) { m_groundColor = c; }
-    glm::vec3 sunColor() const { return m_sunColor; }
-    void setSunColor(const glm::vec3& c) { m_sunColor = c; }
-    glm::vec3 lightDir() const { return m_lightDir; }
-    void setLightDir(const glm::vec3& d) { m_lightDir = d; }
+    // Sky / Ground / Sun
+    glm::vec3 skyColor() const        { return m_skyColor; }
+    void setSkyColor(const glm::vec3& c)   { m_skyColor = c; }
+    glm::vec3 groundColor() const     { return m_groundColor; }
+    void setGroundColor(const glm::vec3& c){ m_groundColor = c; }
+    glm::vec3 sunColor() const        { return m_sunColor; }
+    void setSunColor(const glm::vec3& c)   { m_sunColor = c; }
+    glm::vec3 lightDir() const        { return m_lightDir; }
+    void setLightDir(const glm::vec3& d)   { m_lightDir = d; }
 
-    glm::vec3 fogColor() const { return m_fogColor; }
-    void setFogColor(const glm::vec3& c) { m_fogColor = c; }
-    float fogDensity() const { return m_fogDensity; }
-    void setFogDensity(float d) { m_fogDensity = std::max(0.0f, d); }
+    // Fog
+    glm::vec3 fogColor() const        { return m_fogColor; }
+    void setFogColor(const glm::vec3& c)   { m_fogColor = c; }
+    float fogDensity() const          { return m_fogDensity; }
+    void  setFogDensity(float d)      { m_fogDensity = std::max(0.0f, d); }
+    float fogBaseHeight() const       { return m_fogBaseHeight; }
+    void  setFogBaseHeight(float v)   { m_fogBaseHeight = v; }
+    float fogHeightFalloff() const    { return m_fogHeightFalloff; }
+    void  setFogHeightFalloff(float v){ m_fogHeightFalloff = std::max(0.0f, v); }
+
+    // Wetness
+    float wetness() const             { return m_wetness; }
+    void  setWetness(float v)         { m_wetness = std::clamp(v, 0.0f, 1.0f); }
+
+    // Emissive windows
+    float windowEmissive() const      { return m_windowEmissive; }
+    void  setWindowEmissive(float v)  { m_windowEmissive = std::max(0.0f, v); }
+    float dayFactor() const           { return m_dayFactor; }
+    void  setDayFactor(float v)       { m_dayFactor = std::clamp(v, 0.0f, 1.0f); }
 
 private:
     Model m_cityModel;
     std::vector<glm::mat4> m_instanceTransforms;
     float m_aspect = 16.0f / 9.0f;
 
-    // Hướng nắng (vector “ánh sáng tới cảnh” — shader dùng L = normalize(-uLightDir)).
     glm::vec3 m_lightDir{0.4f, -0.92f, 0.15f};
-    // Ambient bán cầu: trời (lạnh/sáng) + phản chiếu mặt đất (ấm).
     glm::vec3 m_skyColor{0.38f, 0.48f, 0.62f};
     glm::vec3 m_groundColor{0.20f, 0.18f, 0.16f};
     glm::vec3 m_sunColor{1.05f, 0.97f, 0.88f};
     float m_exposure = 1.18f;
 
     glm::vec3 m_fogColor{0.45f, 0.52f, 0.62f};
-    float m_fogDensity = 0.0f;
+    float m_fogDensity       = 0.0f;
+    float m_fogBaseHeight    = 0.0f;
+    float m_fogHeightFalloff = 0.04f;
+
+    float m_wetness        = 0.0f;
+    float m_windowEmissive = 1.5f;
+    float m_dayFactor      = 1.0f;
 };

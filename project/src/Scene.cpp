@@ -1,6 +1,8 @@
 #include "Scene.h"
 
 #include <iostream>
+#include <string>
+#include <utility>
 
 bool Scene::loadCityModel(const std::string& glbPath)
 {
@@ -27,8 +29,19 @@ void Scene::render(Shader& shader, const Camera& camera) const
     shader.setVec3("uSunColor", m_sunColor);
     shader.setFloat("uExposure", m_exposure);
     shader.setVec3("uViewPos", camera.position());
+
+    // Fog
     shader.setVec3("uFogColor", m_fogColor);
     shader.setFloat("uFogDensity", m_fogDensity);
+    shader.setFloat("uFogBaseHeight", m_fogBaseHeight);
+    shader.setFloat("uFogHeightFalloff", m_fogHeightFalloff);
+
+    // Wet surface
+    shader.setFloat("uWetness", m_wetness);
+
+    // Emissive windows
+    shader.setFloat("uWindowEmissive", m_windowEmissive);
+    shader.setFloat("uDayFactor", m_dayFactor);
 
     for (const glm::mat4& world : m_instanceTransforms) {
         m_cityModel.draw(shader, world);

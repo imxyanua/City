@@ -1,6 +1,7 @@
 #include "Model.h"
 
 #include <iostream>
+#include <utility>
 
 bool Model::loadFromGLB(const std::string& path)
 {
@@ -10,6 +11,7 @@ bool Model::loadFromGLB(const std::string& path)
         std::cerr << "[Model] " << err << "\n";
         return false;
     }
+    m_sourcePath = path;
     return true;
 }
 
@@ -21,6 +23,7 @@ void Model::clear()
             m.diffuseTexture = 0;
         }
     }
+    m_sourcePath.clear();
     m_meshes.clear();
     m_materials.clear();
 }

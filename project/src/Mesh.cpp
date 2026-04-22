@@ -18,6 +18,7 @@ Mesh::Mesh(Mesh&& other) noexcept
     , m_indexType(other.m_indexType)
     , m_indexed(other.m_indexed)
     , m_materialIndex(other.m_materialIndex)
+    , m_objectName(std::move(other.m_objectName))
 {
     other.m_vao = 0;
     other.m_vboPos = other.m_vboNrm = other.m_vboUv = other.m_ebo = 0;
@@ -37,6 +38,7 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept
         m_indexType = other.m_indexType;
         m_indexed = other.m_indexed;
         m_materialIndex = other.m_materialIndex;
+        m_objectName = std::move(other.m_objectName);
         other.m_vao = 0;
         other.m_vboPos = other.m_vboNrm = other.m_vboUv = other.m_ebo = 0;
         other.m_indexCount = 0;

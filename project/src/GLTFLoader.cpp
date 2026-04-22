@@ -13,9 +13,12 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <string>
 
 namespace gltf {
 namespace {
+
+bool readFloatVec3(const tinygltf::Model& model, int accessorIndex, std::vector<float>& out);
 
 glm::mat4 getLocalTransform(const tinygltf::Node& n)
 {
@@ -238,6 +241,7 @@ GpuMaterial buildMaterial(
         return g;
 
     const tinygltf::Material& m = model.materials[static_cast<size_t>(materialIndex)];
+    g.name = m.name;
     const auto& pbr = m.pbrMetallicRoughness;
 
     if (pbr.baseColorFactor.size() >= 4) {
@@ -265,6 +269,26 @@ GpuMaterial buildMaterial(
     return g;
 }
 
+std::string makeMeshObjectName(
+    const tinygltf::Node& node,
+    const tinygltf::Mesh& tm,
+    int nodeIndex,
+    size_t primIndex)
+{
+    std::string base;
+    if (!node.name.empty()) {
+        base = node.name;
+    } else if (!tm.name.empty()) {
+        base = tm.name;
+    } else {
+        base = "gltf_node_" + std::to_string(nodeIndex);
+    }
+    if (tm.primitives.size() > 1) {
+        base += "_prim" + std::to_string(primIndex);
+    }
+    return base;
+}
+
 void visitNode(
     const tinygltf::Model& model,
     int nodeIndex,
@@ -283,7 +307,8 @@ void visitNode(
         const tinygltf::Mesh& tm = model.meshes[static_cast<size_t>(node.mesh)];
         const glm::mat3 normalMat = glm::mat3(glm::transpose(glm::inverse(world)));
 
-        for (const auto& prim : tm.primitives) {
+        for (size_t primI = 0; primI < tm.primitives.size(); ++primI) {
+            const auto& prim = tm.primitives[primI];
             if (prim.mode != TINYGLTF_MODE_TRIANGLES && prim.mode != -1) {
                 warn += "Skipping non-triangle primitive.\n";
                 continue;
@@ -329,6 +354,7 @@ void visitNode(
             }
 
             Mesh mesh;
+            mesh.setObjectName(makeMeshObjectName(node, tm, nodeIndex, primI));
             mesh.setMaterialIndex(prim.material);
             mesh.upload(pos, nrm, uv, indices);
             meshesOut.push_back(std::move(mesh));
@@ -394,6 +420,8 @@ bool loadGLB(const std::string& path, Model& model, std::string& errorMessage)
     if (!localWarn.empty()) {
         std::cerr << "[GLTFLoader] " << localWarn;
     }
+
+    std::cerr << "[GLTFLoader] " << model.meshes().size() << " mesh loaded.\n";
 
     if (model.m_meshes.empty()) {
         errorMessage = "No triangle meshes were built from GLB (check node/mesh structure).";

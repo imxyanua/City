@@ -3,6 +3,8 @@
 #include <glad/gl.h>
 
 #include <cstddef>
+#include <string>
+#include <utility>
 #include <vector>
 
 // One drawable primitive: VAO + separate VBOs (position, normal, UV) + optional EBO.
@@ -27,6 +29,10 @@ public:
     int materialIndex() const { return m_materialIndex; }
     void setMaterialIndex(int idx) { m_materialIndex = idx; }
 
+    // Tên object trong GLB (node / mesh) — debug, chọn lọc theo tên sau này.
+    const std::string& objectName() const { return m_objectName; }
+    void setObjectName(std::string name) { m_objectName = std::move(name); }
+
 private:
     void release();
 
@@ -39,4 +45,5 @@ private:
     GLenum m_indexType = GL_UNSIGNED_INT;
     bool m_indexed = true;
     int m_materialIndex = 0;
+    std::string m_objectName;
 };
