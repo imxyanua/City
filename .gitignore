@@ -1,0 +1,20 @@
+# Visual Studio / Cursor
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+
+# Bản dựng CMake (không commit cây build)
+project/out/
+project/build/
+**/CMakeFiles/
+**/cmake_install.cmake
+**/CTestTestfile.cmake
+**/*.dir/
+
+# GLB trùng ở thư mục gốc (bản dùng nằm trong project/assets/models/)
+/procedural_city_7.glb
+
+# Model lớn không đưa lên GitHub (đặt tay vào project/assets/models/)
+project/assets/models/*.glb
