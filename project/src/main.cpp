@@ -477,6 +477,14 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    std::vector<std::string> carPaths = {
+        (exeDir / "assets" / "models" / "2014_bmw_z4_sdrive35is.glb").string(),
+        (exeDir / "assets" / "models" / "2021_lexus_bev_sport_concept.glb").string(),
+        (exeDir / "assets" / "models" / "2022_nio_et7.glb").string()
+    };
+    scene.loadCarModels(carPaths);
+    scene.initTrafficAndPedestrians();
+
     scene.setInstanceTransforms({glm::mat4(1.0f)});
 
     Camera camera(glm::vec3(0.0f, 38.0f, 85.0f), -90.0f, -16.0f);
@@ -523,152 +531,144 @@ int main(int argc, char* argv[])
         g_deltaTime = static_cast<float>(now - g_lastFrame);
         g_lastFrame = now;
 
+        scene.update(g_deltaTime);
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
         if (showMenu) {
-            ImGui::SetNextWindowBgAlpha(0.94f);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.05f, 0.98f));
+            ImGui::SetNextWindowBgAlpha(0.98f);
             ImGui::Begin(u8"Cài đặt (Tab để đóng/mở)", &showMenu, ImGuiWindowFlags_AlwaysAutoResize);
 
             ImGui::Text(u8"FPS: %.0f", static_cast<double>(imguiIo.Framerate));
             ImGui::Separator();
 
-            if (ImGui::CollapsingHeader(u8"Thời gian trong ngày", ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::Checkbox(u8"Đồng bộ ánh sáng theo giờ", &syncTimeOfDay);
-                if (syncTimeOfDay) {
-                    ImGui::SliderFloat(u8"Giờ (0–24)", &timeOfDayHour, 0.0f, 24.0f, "%.2f");
-                    char tbuf[8];
-                    formatHourVi(timeOfDayHour, tbuf, sizeof(tbuf));
-                    ImGui::Text(u8"Đang chỉnh: %s", tbuf);
-                    ImGui::TextWrapped(
-                        u8"Mặt trời quay theo giờ; bình minh/hoàng hôn tô màu trời. Tắt đồng bộ để chỉnh tay màu và hướng sáng.");
-                }
-            }
+            if (ImGui::BeginTabBar("SettingsTabs")) {
 
-            if (ImGui::CollapsingHeader(u8"Ánh sáng & màu", ImGuiTreeNodeFlags_DefaultOpen)) {
-                float exp = scene.exposure();
-                if (ImGui::SliderFloat(u8"Phơi sáng (exposure)", &exp, 0.2f, 3.5f)) {
-                    scene.setExposure(exp);
+                if (ImGui::BeginTabItem(u8"Môi trường")) {
+                    ImGui::Text(u8"--- Thời gian ---");
+                    ImGui::Checkbox(u8"Đồng bộ ánh sáng theo giờ", &syncTimeOfDay);
+                    if (syncTimeOfDay) {
+                        ImGui::SliderFloat(u8"Giờ (0–24)", &timeOfDayHour, 0.0f, 24.0f, "%.2f");
+                        char tbuf[8];
+                        formatHourVi(timeOfDayHour, tbuf, sizeof(tbuf));
+                        ImGui::Text(u8"Đang chỉnh: %s", tbuf);
+                    }
+                    ImGui::Separator();
+                    ImGui::Text(u8"--- Sương mù ---");
+                    float fogD = scene.fogDensity();
+                    if (ImGui::SliderFloat(u8"Mật độ (0 = tắt)", &fogD, 0.0f, 1.2f)) scene.setFogDensity(fogD);
+                    float fBase = scene.fogBaseHeight();
+                    if (ImGui::SliderFloat(u8"Độ cao nền", &fBase, -10.0f, 50.0f)) scene.setFogBaseHeight(fBase);
+                    float fFalloff = scene.fogHeightFalloff();
+                    if (ImGui::SliderFloat(u8"Giảm theo độ cao", &fFalloff, 0.0f, 0.2f)) scene.setFogHeightFalloff(fFalloff);
+                    glm::vec3 fc = scene.fogColor();
+                    float fc3[3] = {fc.x, fc.y, fc.z};
+                    if (ImGui::ColorEdit3(u8"Màu sương", fc3)) scene.setFogColor(glm::vec3(fc3[0], fc3[1], fc3[2]));
+                    ImGui::Separator();
+                    ImGui::Text(u8"--- Mưa & Ướt ---");
+                    if (ImGui::SliderFloat(u8"Cường độ mưa", &rainIntensity, 0.0f, 1.0f)) scene.setWetness(rainIntensity);
+                    ImGui::SliderFloat2(u8"Hướng gió", &windDir.x, -1.0f, 1.0f);
+                    windDir = glm::normalize(windDir + glm::vec2(1e-5f));
+                    ImGui::EndTabItem();
                 }
-                ImGui::BeginDisabled(syncTimeOfDay);
-                glm::vec3 sky = scene.skyColor();
-                glm::vec3 gnd = scene.groundColor();
-                glm::vec3 sun = scene.sunColor();
-                float sky3[3] = {sky.x, sky.y, sky.z};
-                float gnd3[3] = {gnd.x, gnd.y, gnd.z};
-                float sun3[3] = {sun.x, sun.y, sun.z};
-                if (ImGui::ColorEdit3(u8"Màu trời (ambient trên)", sky3)) {
-                    scene.setSkyColor(glm::vec3(sky3[0], sky3[1], sky3[2]));
-                }
-                if (ImGui::ColorEdit3(u8"Màu đất (ambient dưới)", gnd3)) {
-                    scene.setGroundColor(glm::vec3(gnd3[0], gnd3[1], gnd3[2]));
-                }
-                if (ImGui::ColorEdit3(u8"Màu nắng", sun3)) {
-                    scene.setSunColor(glm::vec3(sun3[0], sun3[1], sun3[2]));
-                }
-                glm::vec3 ld = scene.lightDir();
-                float lx = ld.x, ly = ld.y, lz = ld.z;
-                if (ImGui::DragFloat3(u8"Hướng tia sáng (world)", &lx, 0.01f)) {
-                    scene.setLightDir(glm::vec3(lx, ly, lz));
-                }
-                ImGui::EndDisabled();
 
-            }
+                if (ImGui::BeginTabItem(u8"Ánh sáng")) {
+                    float exp = scene.exposure();
+                    if (ImGui::SliderFloat(u8"Phơi sáng (exposure)", &exp, 0.2f, 3.5f)) scene.setExposure(exp);
+                    
+                    ImGui::BeginDisabled(syncTimeOfDay);
+                    glm::vec3 sky = scene.skyColor();
+                    glm::vec3 gnd = scene.groundColor();
+                    glm::vec3 sun = scene.sunColor();
+                    float sky3[3] = {sky.x, sky.y, sky.z};
+                    float gnd3[3] = {gnd.x, gnd.y, gnd.z};
+                    float sun3[3] = {sun.x, sun.y, sun.z};
+                    if (ImGui::ColorEdit3(u8"Màu trời (ambient trên)", sky3)) scene.setSkyColor(glm::vec3(sky3[0], sky3[1], sky3[2]));
+                    if (ImGui::ColorEdit3(u8"Màu đất (ambient dưới)", gnd3)) scene.setGroundColor(glm::vec3(gnd3[0], gnd3[1], gnd3[2]));
+                    if (ImGui::ColorEdit3(u8"Màu nắng", sun3)) scene.setSunColor(glm::vec3(sun3[0], sun3[1], sun3[2]));
+                    glm::vec3 ld = scene.lightDir();
+                    float lx = ld.x, ly = ld.y, lz = ld.z;
+                    if (ImGui::DragFloat3(u8"Hướng tia sáng", &lx, 0.01f)) scene.setLightDir(glm::vec3(lx, ly, lz));
+                    ImGui::EndDisabled();
 
-            if (ImGui::CollapsingHeader(u8"Sương mù", ImGuiTreeNodeFlags_DefaultOpen)) {
-                float fogD = scene.fogDensity();
-                if (ImGui::SliderFloat(u8"Mật độ (0 = tắt)", &fogD, 0.0f, 1.2f)) scene.setFogDensity(fogD);
-                
-                float fBase = scene.fogBaseHeight();
-                if (ImGui::SliderFloat(u8"Độ cao nền", &fBase, -10.0f, 50.0f)) scene.setFogBaseHeight(fBase);
-                
-                float fFalloff = scene.fogHeightFalloff();
-                if (ImGui::SliderFloat(u8"Giảm theo độ cao", &fFalloff, 0.0f, 0.2f)) scene.setFogHeightFalloff(fFalloff);
+                    ImGui::Separator();
+                    ImGui::Text(u8"--- Tòa nhà (Đêm) ---");
+                    float em = scene.windowEmissive();
+                    if (ImGui::SliderFloat(u8"Độ sáng cửa sổ", &em, 0.0f, 5.0f)) scene.setWindowEmissive(em);
 
-                glm::vec3 fc = scene.fogColor();
-                float fc3[3] = {fc.x, fc.y, fc.z};
-                if (ImGui::ColorEdit3(u8"Màu sương", fc3)) scene.setFogColor(glm::vec3(fc3[0], fc3[1], fc3[2]));
-            }
-
-            if (ImGui::CollapsingHeader(u8"Mưa & Ướt", ImGuiTreeNodeFlags_DefaultOpen)) {
-                if (ImGui::SliderFloat(u8"Cường độ mưa", &rainIntensity, 0.0f, 1.0f)) scene.setWetness(rainIntensity);
-                ImGui::SliderFloat2(u8"Hướng gió", &windDir.x, -1.0f, 1.0f);
-                windDir = glm::normalize(windDir + glm::vec2(1e-5f));
-            }
-
-            if (ImGui::CollapsingHeader(u8"Hậu kỳ (Post-processing)", ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::SliderFloat(u8"Bloom Threshold", &bloomThreshold, 0.5f, 5.0f);
-                ImGui::SliderFloat(u8"Bloom Intensity", &bloomIntensity, 0.0f, 2.0f);
-                ImGui::SliderFloat(u8"God Ray (Sun)", &godRayIntensity, 0.0f, 1.5f);
-                ImGui::SliderFloat(u8"Color Grade (Lạnh)", &colorGradeIntensity, 0.0f, 1.0f);
-                ImGui::SliderFloat(u8"Vignette (Viền tối)", &vignetteIntensity, 0.0f, 1.0f);
-            }
-            
-            if (ImGui::CollapsingHeader(u8"Tòa nhà (Đêm)", ImGuiTreeNodeFlags_DefaultOpen)) {
-                float em = scene.windowEmissive();
-                if (ImGui::SliderFloat(u8"Độ sáng cửa sổ", &em, 0.0f, 5.0f)) scene.setWindowEmissive(em);
-            }
-
-            if (ImGui::CollapsingHeader(u8"Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
-                float spd = camera.moveSpeed();
-                if (ImGui::SliderFloat(u8"Tốc độ di chuyển (WASD)", &spd, 2.0f, 80.0f)) {
-                    camera.setMoveSpeed(spd);
+                    ImGui::EndTabItem();
                 }
-                float sens = camera.mouseSensitivity();
-                if (ImGui::SliderFloat(u8"Độ nhạy chuột", &sens, 0.02f, 0.35f)) {
-                    camera.setMouseSensitivity(sens);
-                }
-                float fov = camera.fovDegrees();
-                if (ImGui::SliderFloat(u8"Trường nhìn FOV (độ)", &fov, 20.0f, 90.0f)) {
-                    camera.setFovDegrees(fov);
-                }
-                if (ImGui::Button(u8"Đặt lại vị trí camera")) {
-                    camera = Camera(glm::vec3(0.0f, 38.0f, 85.0f), -90.0f, -16.0f);
-                }
-            }
 
-            if (ImGui::CollapsingHeader(u8"Bố cục cảnh")) {
-                ImGui::Checkbox(u8"Dùng lưới nhiều bản sao (thay vì một model)", &useGridLayout);
-                if (useGridLayout) {
-                    ImGui::SliderInt(u8"Hàng", &gridRows, 1, 10);
-                    ImGui::SliderInt(u8"Cột", &gridCols, 1, 10);
-                    ImGui::SliderFloat(u8"Khoảng cách X", &gridSpaceX, 20.0f, 200.0f);
-                    ImGui::SliderFloat(u8"Khoảng cách Z", &gridSpaceZ, 20.0f, 250.0f);
+                if (ImGui::BeginTabItem(u8"Hậu kỳ")) {
+                    ImGui::SliderFloat(u8"Bloom Threshold", &bloomThreshold, 0.5f, 5.0f);
+                    ImGui::SliderFloat(u8"Bloom Intensity", &bloomIntensity, 0.0f, 2.0f);
+                    ImGui::SliderFloat(u8"God Ray (Sun)", &godRayIntensity, 0.0f, 1.5f);
+                    ImGui::SliderFloat(u8"Color Grade (Lạnh)", &colorGradeIntensity, 0.0f, 1.0f);
+                    ImGui::SliderFloat(u8"Vignette (Viền tối)", &vignetteIntensity, 0.0f, 1.0f);
+                    ImGui::EndTabItem();
                 }
-                if (ImGui::Button(u8"Áp dụng bố cục")) {
+
+                if (ImGui::BeginTabItem(u8"Hệ thống")) {
+                    ImGui::Text(u8"--- Xe & Giao thông ---");
+                    ImGui::Text(u8"Model xe: %d | Xe trên đường: %d", scene.carModelCount(), scene.carCount());
+                    
+                    ImGui::Checkbox(u8"Chỉ hiển thị xe (Debug View)", &scene.m_debugDrawCarOnly);
+                    if (scene.m_debugDrawCarOnly && scene.carModelCount() > 0) {
+                        ImGui::SliderInt(u8"Xem model số", &scene.m_debugCarIndex, 0, scene.carModelCount() - 1);
+                    }
+
+                    float cs = scene.carScale();
+                    if (ImGui::SliderFloat(u8"Tỷ lệ xe (Scale)", &cs, 1.0f, 200.0f, "%.1f")) scene.setCarScale(cs);
+                    float cy = scene.carYOffset();
+                    if (ImGui::SliderFloat(u8"Độ cao xe (Y Offset)", &cy, -5.0f, 5.0f, "%.2f")) scene.setCarYOffset(cy);
+                    ImGui::Separator();
+                    ImGui::Text(u8"--- Camera ---");
+                    float spd = camera.moveSpeed();
+                    if (ImGui::SliderFloat(u8"Tốc độ di chuyển", &spd, 2.0f, 80.0f)) camera.setMoveSpeed(spd);
+                    float sens = camera.mouseSensitivity();
+                    if (ImGui::SliderFloat(u8"Độ nhạy chuột", &sens, 0.02f, 0.35f)) camera.setMouseSensitivity(sens);
+                    float fov = camera.fovDegrees();
+                    if (ImGui::SliderFloat(u8"Trường nhìn FOV", &fov, 20.0f, 90.0f)) camera.setFovDegrees(fov);
+                    if (ImGui::Button(u8"Đặt lại vị trí camera")) camera = Camera(glm::vec3(0.0f, 38.0f, 85.0f), -90.0f, -16.0f);
+                    
+                    ImGui::Separator();
+                    ImGui::Text(u8"--- Bố cục ---");
+                    ImGui::Checkbox(u8"Lưới nhiều bản sao", &useGridLayout);
                     if (useGridLayout) {
-                        scene.setInstanceTransforms(
-                            CityBuilder::buildGrid(gridRows, gridCols, gridSpaceX, gridSpaceZ, 0.0f));
-                    } else {
-                        scene.setInstanceTransforms({glm::mat4(1.0f)});
+                        ImGui::SliderInt(u8"Hàng", &gridRows, 1, 10);
+                        ImGui::SliderInt(u8"Cột", &gridCols, 1, 10);
+                        ImGui::SliderFloat(u8"Khoảng cách X", &gridSpaceX, 20.0f, 200.0f);
+                        ImGui::SliderFloat(u8"Khoảng cách Z", &gridSpaceZ, 20.0f, 250.0f);
                     }
-                }
-            }
+                    if (ImGui::Button(u8"Áp dụng bố cục")) {
+                        if (useGridLayout) scene.setInstanceTransforms(CityBuilder::buildGrid(gridRows, gridCols, gridSpaceX, gridSpaceZ, 0.0f));
+                        else scene.setInstanceTransforms({glm::mat4(1.0f)});
+                    }
 
-            if (ImGui::CollapsingHeader(u8"Hiển thị")) {
-                if (ImGui::Checkbox(u8"Khung dây (wireframe)", &wireframe)) {
-                    glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
-                }
-                if (ImGui::Checkbox(u8"Loại mặt sau (cull)", &cullBack)) {
-                    if (cullBack) {
-                        glEnable(GL_CULL_FACE);
-                    } else {
-                        glDisable(GL_CULL_FACE);
+                    ImGui::Separator();
+                    ImGui::Text(u8"--- Hiển thị ---");
+                    if (ImGui::Checkbox(u8"Khung dây", &wireframe)) glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
+                    if (ImGui::Checkbox(u8"Loại mặt sau (cull)", &cullBack)) {
+                        if (cullBack) glEnable(GL_CULL_FACE);
+                        else glDisable(GL_CULL_FACE);
                     }
+                    if (ImGui::Checkbox(u8"VSync", &vsync)) glfwSwapInterval(vsync ? 1 : 0);
+                    
+                    ImGui::BeginDisabled(syncTimeOfDay);
+                    ImGui::ColorEdit3(u8"Màu nền trời", clearCol);
+                    ImGui::EndDisabled();
+
+                    ImGui::EndTabItem();
                 }
-                if (ImGui::Checkbox(u8"Đồng bộ dọc (VSync)", &vsync)) {
-                    glfwSwapInterval(vsync ? 1 : 0);
-                }
-                ImGui::BeginDisabled(syncTimeOfDay);
-                ImGui::ColorEdit3(u8"Màu nền trời (xóa màn hình)", clearCol);
-                ImGui::EndDisabled();
-                if (syncTimeOfDay) {
-                    ImGui::TextDisabled(u8"(Đang theo giờ trong ngày)");
-                }
+
+                ImGui::EndTabBar();
             }
 
             ImGui::End();
+            ImGui::PopStyleColor();
         }
 
         ImGui::Render();

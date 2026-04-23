@@ -11,15 +11,61 @@
 #include <string>
 #include <vector>
 
+struct Car {
+    glm::vec3 pos{0.0f};
+    glm::vec3 dir{0.0f, 0.0f, 1.0f};
+    float speed = 10.0f;
+    int modelIdx = 0;
+    float scale = 1.0f;
+    float rotOffset = 0.0f;
+    bool stopped = false;   // stopped at red light?
+};
+
+struct Pedestrian {
+    glm::vec3 pos{0.0f};
+    glm::vec3 dir{0.0f, 0.0f, 1.0f};
+    float speed = 1.2f;
+    float walkCycle = 0.0f;
+};
+
+enum class TrafficPhase { GreenNS, YellowNS, GreenEW, YellowEW };
+
+struct TrafficLight {
+    glm::vec3 pos{0.0f};       // world position of the intersection center
+    TrafficPhase phase = TrafficPhase::GreenNS;
+    float timer = 0.0f;
+    float greenDuration  = 10.0f;
+    float yellowDuration =  2.0f;
+
+    // Returns true if North-South traffic can go
+    bool isGreenNS() const { return phase == TrafficPhase::GreenNS; }
+    // Returns true if East-West traffic can go
+    bool isGreenEW() const { return phase == TrafficPhase::GreenEW; }
+};
+
 class Scene {
 public:
     bool loadCityModel(const std::string& glbPath);
+    bool loadCarModels(const std::vector<std::string>& paths);
     void setInstanceTransforms(std::vector<glm::mat4> transforms);
+    
+    void initTrafficAndPedestrians();
+    void update(float dt);
     void setAspect(float aspect) { m_aspect = aspect; }
     void render(Shader& shader, const Camera& camera) const;
 
+    float carScale() const { return m_carScale; }
+    void setCarScale(float s) { m_carScale = s; for(auto& c : m_cars) c.scale = s; }
+    float carYOffset() const { return m_carYOffset; }
+    void setCarYOffset(float y) { m_carYOffset = y; }
+    int carCount() const { return (int)m_cars.size(); }
+    int carModelCount() const { return (int)m_carModels.size(); }
+
     Model&       cityModel()       { return m_cityModel; }
     const Model& cityModel() const { return m_cityModel; }
+
+    bool m_debugDrawCarOnly = false;
+    int m_debugCarIndex = 0;
 
     // Exposure
     float exposure() const            { return m_exposure; }
@@ -56,9 +102,30 @@ public:
     void  setDayFactor(float v)       { m_dayFactor = std::clamp(v, 0.0f, 1.0f); }
 
 private:
+    void drawCars(Shader& shader, const glm::mat4& world) const;
+    void drawPedestrians(Shader& shader, const glm::mat4& world) const;
+    void drawTrafficLights(Shader& shader, const glm::mat4& world) const;
+    void buildPersonMesh();
+    void buildTrafficLightMesh();
+
     Model m_cityModel;
     std::vector<glm::mat4> m_instanceTransforms;
+
+    std::vector<Model> m_carModels;
+    std::vector<Car> m_cars;
+
+    Mesh m_personMesh;
+    std::vector<Pedestrian> m_pedestrians;
+
+    // Traffic lights
+    Mesh m_trafficLightPole;
+    Mesh m_trafficLightHead;
+    Mesh m_trafficLightBulb;
+    std::vector<TrafficLight> m_trafficLights;
+
     float m_aspect = 16.0f / 9.0f;
+    float m_carScale = 100.0f;
+    float m_carYOffset = 0.0f;
 
     glm::vec3 m_lightDir{0.4f, -0.92f, 0.15f};
     glm::vec3 m_skyColor{0.38f, 0.48f, 0.62f};
