@@ -105,36 +105,73 @@ static void addSphere(std::vector<float>& p, std::vector<float>& n, std::vector<
     }
 }
 
+static void addCone(std::vector<float>& p, std::vector<float>& n, std::vector<float>& uv,
+                   std::vector<unsigned int>& idx, glm::vec3 base_center, float radius, float height, int segs=12) {
+    unsigned int b = (unsigned int)(p.size()/3);
+    glm::vec3 tip = base_center + glm::vec3(0, height, 0);
+    for(int i=0; i<segs; ++i) {
+        float a0 = 2.0f*PI*i/segs, a1 = 2.0f*PI*(i+1)/segs;
+        float c0=std::cos(a0), s0=std::sin(a0), c1=std::cos(a1), s1=std::sin(a1);
+        glm::vec3 v0(base_center.x + radius*c0, base_center.y, base_center.z + radius*s0);
+        glm::vec3 v1(base_center.x + radius*c1, base_center.y, base_center.z + radius*s1);
+        
+        glm::vec3 nm = glm::normalize(glm::cross(v1 - v0, tip - v0));
+        unsigned int bi = (unsigned int)(p.size()/3);
+        auto pushV=[&](glm::vec3 vv, glm::vec3 nn){ p.push_back(vv.x);p.push_back(vv.y);p.push_back(vv.z);
+            n.push_back(nn.x);n.push_back(nn.y);n.push_back(nn.z); uv.push_back(0);uv.push_back(0);};
+        pushV(v0, nm); pushV(v1, nm); pushV(tip, nm);
+        idx.push_back(bi); idx.push_back(bi+1); idx.push_back(bi+2);
+    }
+}
+
 // ─── build meshes ────────────────────────────────────────────────
-void Scene::buildPersonMesh() {
-    std::vector<float> p,n,uv; std::vector<unsigned int> idx;
-    // Head (sphere)
-    addSphere(p,n,uv,idx, glm::vec3(0, 1.65f, 0), 0.12f, 8, 6);
-    // Neck
-    addCylinder(p,n,uv,idx, glm::vec3(0, 1.45f, 0), 0.045f, 0.08f, 6);
-    // Torso (cylinder)
-    addCylinder(p,n,uv,idx, glm::vec3(0, 0.9f, 0), 0.16f, 0.55f, 8);
-    // Shoulders (horizontal box across top of torso)
-    addBox(p,n,uv,idx, glm::vec3(0, 1.42f, 0), glm::vec3(0.24f, 0.04f, 0.08f));
-    // Hips (slightly wider)
-    addCylinder(p,n,uv,idx, glm::vec3(0, 0.85f, 0), 0.14f, 0.08f, 8);
-    // Left leg
-    addCylinder(p,n,uv,idx, glm::vec3(-0.08f, 0.08f, 0), 0.055f, 0.77f, 6);
-    // Right leg
-    addCylinder(p,n,uv,idx, glm::vec3(0.08f, 0.08f, 0), 0.055f, 0.77f, 6);
-    // Left foot/shoe
-    addBox(p,n,uv,idx, glm::vec3(-0.08f, 0.03f, 0.03f), glm::vec3(0.05f, 0.03f, 0.09f));
-    // Right foot/shoe
-    addBox(p,n,uv,idx, glm::vec3(0.08f, 0.03f, 0.03f), glm::vec3(0.05f, 0.03f, 0.09f));
-    // Left arm
-    addCylinder(p,n,uv,idx, glm::vec3(-0.22f, 0.95f, 0), 0.04f, 0.48f, 6);
-    // Right arm
-    addCylinder(p,n,uv,idx, glm::vec3(0.22f, 0.95f, 0), 0.04f, 0.48f, 6);
-    // Left hand (small sphere)
-    addSphere(p,n,uv,idx, glm::vec3(-0.22f, 0.93f, 0), 0.04f, 5, 3);
-    // Right hand (small sphere)
-    addSphere(p,n,uv,idx, glm::vec3(0.22f, 0.93f, 0), 0.04f, 5, 3);
-    m_personMesh.upload(p,n,uv,idx);
+void Scene::buildPedestrianMeshes() {
+    // Body (Torso)
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addCylinder(p,n,uv,idx, glm::vec3(0, 0.9f, 0), 0.18f, 0.55f, 8); // Torso
+        addBox(p,n,uv,idx, glm::vec3(0, 1.42f, 0), glm::vec3(0.24f, 0.04f, 0.08f)); // Shoulders
+        m_pedBodyMesh.upload(p,n,uv,idx);
+    }
+    // Head
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addSphere(p,n,uv,idx, glm::vec3(0, 1.65f, 0), 0.12f, 8, 6); // Head
+        addCylinder(p,n,uv,idx, glm::vec3(0, 1.45f, 0), 0.045f, 0.08f, 6); // Neck
+        m_pedHeadMesh.upload(p,n,uv,idx);
+    }
+    // Limb (Leg/Arm segment)
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addCylinder(p,n,uv,idx, glm::vec3(0, 0, 0), 0.05f, 1.0f, 6); // Generic 1-unit limb
+        m_pedLimbMesh.upload(p,n,uv,idx);
+    }
+    // Eye
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addSphere(p,n,uv,idx, glm::vec3(0, 0, 0), 0.025f, 4, 3);
+        m_pedEyeMesh.upload(p,n,uv,idx);
+    }
+    // Hair (Basic mop)
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addSphere(p,n,uv,idx, glm::vec3(0, 0, 0), 0.13f, 8, 6);
+        addBox(p,n,uv,idx, glm::vec3(0, -0.05f, -0.05f), glm::vec3(0.12f, 0.08f, 0.1f));
+        m_pedHairMesh.upload(p,n,uv,idx);
+    }
+    // Backpack
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addBox(p,n,uv,idx, glm::vec3(0, 0, 0), glm::vec3(0.12f, 0.18f, 0.06f));
+        m_pedPackMesh.upload(p,n,uv,idx);
+    }
+    // Umbrella
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addCone(p,n,uv,idx, glm::vec3(0, 0, 0), 1.0f, 0.4f, 16); // Top
+        addCylinder(p,n,uv,idx, glm::vec3(0, -1.2f, 0), 0.02f, 1.2f, 6); // Handle
+        m_umbrellaMesh.upload(p,n,uv,idx);
+    }
 }
 
 void Scene::buildTrafficLightMesh() {
@@ -189,7 +226,7 @@ void Scene::initTrafficAndPedestrians() {
 
     // --- Traffic lights at intersections ---
     m_trafficLights.clear();
-    buildPersonMesh();
+    buildPedestrianMeshes();
     buildTrafficLightMesh();
     buildStreetLampMesh();
     m_splashSystem.init();
@@ -256,7 +293,7 @@ void Scene::initTrafficAndPedestrians() {
     }
 
     // --- Pedestrians ---
-    buildPersonMesh();
+    buildPedestrianMeshes();
     m_pedestrians.clear();
     std::uniform_real_distribution<float> disPedPos(-150.0f, 150.0f);
     for (int i = 0; i < 120; ++i) {
@@ -477,25 +514,121 @@ void Scene::drawCars(Shader& shader, const glm::mat4& world, const glm::vec3& ca
 
 void Scene::drawPedestrians(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
     shader.setBool("uUseTexture", false);
+
     for (const auto& pd : m_pedestrians) {
         glm::vec3 globalPos = glm::vec3(world * glm::vec4(pd.pos, 1.0f));
         if (glm::distance(camPos, globalPos) > 120.0f) continue;
-        glm::mat4 model = world;
+
+        // --- Deterministic randomization based on position ---
+        auto hash = [](float x, float z) {
+            float v = std::sin(x * 12.9898f + z * 78.233f) * 43758.5453f;
+            return v - std::floor(v);
+        };
+        float h1 = hash(pd.pos.x, pd.pos.z);
+        float h2 = hash(pd.pos.z, pd.pos.x);
+        float h3 = hash(pd.pos.x + 0.1f, pd.pos.z - 0.1f);
+
+        glm::vec4 skinCol = glm::vec4(0.85f + h1*0.1f, 0.65f + h2*0.1f, 0.45f + h3*0.1f, 1.0f);
+        if (h1 > 0.8f) skinCol = glm::vec4(0.35f, 0.25f, 0.15f, 1.0f);
+        glm::vec4 clothCol = glm::vec4(0.2f + h2*0.6f, 0.2f + h3*0.6f, 0.2f + h1*0.6f, 1.0f);
+        glm::vec4 hairCol = (h3 > 0.5f) ? glm::vec4(0.12f, 0.07f, 0.02f, 1.0f) : glm::vec4(0.55f, 0.35f, 0.15f, 1.0f);
+
+        // --- Animation ---
         float bob = std::abs(std::sin(pd.walkCycle * PI)) * 0.08f;
-        model = glm::translate(model, pd.pos + glm::vec3(0, bob, 0));
+        float limbSwing = std::sin(pd.walkCycle * PI) * 0.45f;
         float rot = std::atan2(pd.dir.x, pd.dir.z);
-        model = glm::rotate(model, rot, glm::vec3(0, 1, 0));
-        float sway = std::sin(pd.walkCycle * PI) * 0.04f;
-        model = glm::rotate(model, sway, glm::vec3(0, 0, 1));
-        shader.setMat4("uModel", model);
-        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(model))));
-        // Clothing color from position hash
-        float rV = std::sin(pd.pos.x * 12.9898f) * 43758.5453f;
-        float gV = std::sin(pd.pos.z * 78.233f) * 43758.5453f;
-        float tR = std::abs(rV - std::floor(rV));
-        float tG = std::abs(gV - std::floor(gV));
-        shader.setVec4("uBaseColorFactor", glm::vec4(0.15f+tR*0.55f, 0.15f+tG*0.55f, 0.25f, 1.0f));
-        m_personMesh.draw();
+
+        // --- Character Variety Scale ---
+        float heightVar = 0.92f + h1 * 0.16f;
+        float widthVar = 0.95f + h2 * 0.15f;
+
+        glm::mat4 baseModel = glm::translate(world, pd.pos + glm::vec3(0, bob, 0));
+        baseModel = glm::rotate(baseModel, rot, glm::vec3(0, 1, 0));
+        baseModel = glm::scale(baseModel, glm::vec3(widthVar, heightVar, widthVar));
+
+        // 1. Body
+        shader.setVec4("uBaseColorFactor", clothCol);
+        shader.setMat4("uModel", baseModel);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(baseModel))));
+        m_pedBodyMesh.draw();
+
+        // 2. Head
+        shader.setVec4("uBaseColorFactor", skinCol);
+        shader.setMat4("uModel", baseModel);
+        m_pedHeadMesh.draw();
+
+        // 2.1 Hair
+        shader.setVec4("uBaseColorFactor", hairCol);
+        glm::mat4 hairModel = glm::translate(baseModel, glm::vec3(0, 1.7f, 0));
+        if (h2 > 0.5f) hairModel = glm::scale(hairModel, glm::vec3(1.1f, 0.8f, 1.1f)); // Different style
+        shader.setMat4("uModel", hairModel);
+        m_pedHairMesh.draw();
+
+        // 2.2 Eyes (always look in dir)
+        shader.setVec4("uBaseColorFactor", glm::vec4(0.05f, 0.05f, 0.05f, 1.0f));
+        // Left Eye
+        glm::mat4 lEye = glm::translate(baseModel, glm::vec3(-0.04f, 1.68f, 0.1f));
+        shader.setMat4("uModel", lEye);
+        m_pedEyeMesh.draw();
+        // Right Eye
+        glm::mat4 rEye = glm::translate(baseModel, glm::vec3(0.04f, 1.68f, 0.1f));
+        shader.setMat4("uModel", rEye);
+        m_pedEyeMesh.draw();
+
+        // 2.3 Backpack (Chance)
+        if (h1 > 0.65f) {
+            shader.setVec4("uBaseColorFactor", clothCol * 0.4f); // Darker backpack
+            glm::mat4 pack = glm::translate(baseModel, glm::vec3(0, 1.15f, -0.18f));
+            shader.setMat4("uModel", pack);
+            m_pedPackMesh.draw();
+        }
+
+        // 3. Legs (swinging)
+        shader.setVec4("uBaseColorFactor", clothCol * 0.85f);
+        // Left
+        glm::mat4 lLeg = glm::translate(baseModel, glm::vec3(-0.1f, 0.85f, 0));
+        lLeg = glm::rotate(lLeg, limbSwing, glm::vec3(1, 0, 0));
+        lLeg = glm::scale(lLeg, glm::vec3(1, 0.85f, 1)); 
+        lLeg = glm::translate(lLeg, glm::vec3(0, -1.0f, 0)); 
+        shader.setMat4("uModel", lLeg);
+        m_pedLimbMesh.draw();
+        // Right
+        glm::mat4 rLeg = glm::translate(baseModel, glm::vec3(0.1f, 0.85f, 0));
+        rLeg = glm::rotate(rLeg, -limbSwing, glm::vec3(1, 0, 0));
+        rLeg = glm::scale(rLeg, glm::vec3(1, 0.85f, 1));
+        rLeg = glm::translate(rLeg, glm::vec3(0, -1.0f, 0));
+        shader.setMat4("uModel", rLeg);
+        m_pedLimbMesh.draw();
+
+        // 4. Arms
+        shader.setVec4("uBaseColorFactor", skinCol);
+        // Left
+        glm::mat4 lArm = glm::translate(baseModel, glm::vec3(-0.22f, 1.45f, 0));
+        lArm = glm::rotate(lArm, -limbSwing * 0.7f, glm::vec3(1, 0, 0));
+        lArm = glm::scale(lArm, glm::vec3(0.8f, 0.5f, 0.8f));
+        lArm = glm::translate(lArm, glm::vec3(0, -1.0f, 0));
+        shader.setMat4("uModel", lArm);
+        m_pedLimbMesh.draw();
+        // Right
+        glm::mat4 rArm = glm::translate(baseModel, glm::vec3(0.22f, 1.45f, 0));
+        rArm = glm::rotate(rArm, limbSwing * 0.7f, glm::vec3(1, 0, 0));
+        rArm = glm::scale(rArm, glm::vec3(0.8f, 0.5f, 0.8f));
+        rArm = glm::translate(rArm, glm::vec3(0, -1.0f, 0));
+        shader.setMat4("uModel", rArm);
+        m_pedLimbMesh.draw();
+
+        // 5. Umbrella
+        if (m_wetness > 0.4f) {
+            glm::vec4 umbrellaCol = glm::vec4(h1, h2, h3, 1.0f);
+            if (glm::length(glm::vec3(umbrellaCol)) < 0.3f) umbrellaCol = glm::vec4(0.9f, 0.1f, 0.1f, 1.0f);
+            
+            glm::mat4 umb = glm::translate(baseModel, glm::vec3(0.15f, 1.8f, 0));
+            umb = glm::rotate(umb, 0.15f, glm::vec3(0, 0, 1));
+            shader.setVec4("uBaseColorFactor", umbrellaCol);
+            shader.setMat4("uModel", umb);
+            shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(umb))));
+            m_umbrellaMesh.draw();
+        }
     }
 }
 

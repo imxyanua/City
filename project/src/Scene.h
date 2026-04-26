@@ -123,7 +123,7 @@ private:
     void drawPedestrians(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void drawTrafficLights(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void drawStreetLamps(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
-    void buildPersonMesh();
+    void buildPedestrianMeshes();
     void buildTrafficLightMesh();
     void buildStreetLampMesh();
 
@@ -133,7 +133,13 @@ private:
     std::vector<Model> m_carModels;
     std::vector<Car> m_cars;
 
-    Mesh m_personMesh;
+    Mesh m_pedBodyMesh;
+    Mesh m_pedHeadMesh;
+    Mesh m_pedLimbMesh;
+    Mesh m_pedEyeMesh;
+    Mesh m_pedHairMesh;
+    Mesh m_pedPackMesh;
+    Mesh m_umbrellaMesh;
     std::vector<Pedestrian> m_pedestrians;
 
     // Traffic lights
