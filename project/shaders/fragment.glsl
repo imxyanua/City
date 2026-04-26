@@ -309,6 +309,63 @@ void main()
         }
     }
 
+    // ---------- Neon billboard signs ----------
+    if (uDayFactor < 0.7)
+    {
+        bool isWall = abs(N.y) < 0.3;
+        if (isWall && vWorldPos.y > 3.0 && vWorldPos.y < 18.0)
+        {
+            float nightStr = 1.0 - smoothstep(0.0, 0.7, uDayFactor);
+
+            // Divide wall into large sign zones
+            vec2 signZone = floor(vec2(vTexCoord.x * 1.5, vTexCoord.y * 2.0));
+            float zoneHash = hash2d(signZone * 31.7 + vec2(13.1, 7.3));
+
+            // Only ~30% of zones have neon signs
+            if (zoneHash > 0.7)
+            {
+                // Pick neon color based on zone
+                vec3 neonCol;
+                float colorSel = fract(zoneHash * 7.13);
+                if (colorSel < 0.25)      neonCol = vec3(0.1, 0.85, 1.0);   // cyan
+                else if (colorSel < 0.5)  neonCol = vec3(1.0, 0.15, 0.55);  // magenta/pink
+                else if (colorSel < 0.75) neonCol = vec3(1.0, 0.55, 0.08);  // orange
+                else                      neonCol = vec3(0.2, 1.0, 0.3);    // green
+
+                // Sign pattern: horizontal bars
+                float barFreq = mix(6.0, 12.0, fract(zoneHash * 3.7));
+                float barPhase = fract(vTexCoord.y * barFreq);
+                float bar = smoothstep(0.3, 0.35, barPhase) * (1.0 - smoothstep(0.55, 0.6, barPhase));
+
+                // Vertical accent lines
+                float lineFreq = mix(3.0, 8.0, fract(zoneHash * 5.1));
+                float linePhase = fract(vTexCoord.x * lineFreq);
+                float vLine = smoothstep(0.42, 0.45, linePhase) * (1.0 - smoothstep(0.52, 0.55, linePhase));
+
+                float signShape = max(bar * 0.8, vLine * 0.5);
+
+                // Flicker animation (some signs flicker more than others)
+                float flickerSpeed = mix(2.0, 8.0, fract(zoneHash * 11.3));
+                float flickerAmt = fract(zoneHash * 2.7) * 0.3;
+                float flicker = 1.0 - flickerAmt + flickerAmt * (0.5 + 0.5 * sin(uTime * flickerSpeed + zoneHash * 50.0));
+
+                // Occasional "broken" sign effect
+                float broken = step(0.92, fract(zoneHash * 19.1));
+                if (broken > 0.5) {
+                    flicker *= step(0.3, fract(uTime * 1.5 + zoneHash * 100.0));
+                }
+
+                float neonStr = signShape * nightStr * flicker * 3.5;
+                color += neonCol * neonStr;
+
+                // Glow bleed (soft halo around neon)
+                float glow = smoothstep(0.6, 0.0, abs(barPhase - 0.45)) * 0.15;
+                glow += smoothstep(0.6, 0.0, abs(linePhase - 0.48)) * 0.1;
+                color += neonCol * glow * nightStr * flicker;
+            }
+        }
+    }
+
     // ---------- Height-based fog ----------
     if (uFogDensity > 1e-6)
     {

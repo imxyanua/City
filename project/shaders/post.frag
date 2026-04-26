@@ -59,10 +59,10 @@ vec3 proceduralSky(vec3 rd, vec3 sunDir, float dayF)
     float upDot = rd.y;
 
     // --- Sky gradient ---
-    vec3 zenithDay   = vec3(0.25, 0.45, 0.85);
-    vec3 horizonDay  = vec3(0.65, 0.75, 0.90);
-    vec3 zenithNight = vec3(0.01, 0.01, 0.04);
-    vec3 horizonNight= vec3(0.04, 0.04, 0.08);
+    vec3 zenithDay   = vec3(0.12, 0.30, 0.75); // Deeper, more saturated blue
+    vec3 horizonDay  = vec3(0.55, 0.75, 0.95);
+    vec3 zenithNight = vec3(0.01, 0.02, 0.05);
+    vec3 horizonNight= vec3(0.06, 0.08, 0.15); // Slight city light glow at night horizon
 
     vec3 zenith  = mix(zenithNight, zenithDay, dayF);
     vec3 horizon = mix(horizonNight, horizonDay, dayF);
@@ -96,14 +96,14 @@ vec3 proceduralSky(vec3 rd, vec3 sunDir, float dayF)
     sky += vec3(1.0, 0.85, 0.6) * softGlow * 0.15 * clamp(sunElev, 0.0, 1.0);
 
     // --- Stars at night ---
-    if (dayF < 0.35) {
-        float starMask = 1.0 - smoothstep(0.0, 0.35, dayF);
-        vec2 starUV = vec2(atan(rd.z, rd.x) * 15.0, rd.y * 30.0);
+    if (dayF < 0.4) {
+        float starMask = 1.0 - smoothstep(0.0, 0.4, dayF);
+        vec2 starUV = vec2(atan(rd.z, rd.x) * 20.0, rd.y * 40.0);
         float starNoise = hash12(floor(starUV));
-        float star = step(0.985, starNoise);
-        star *= 0.6 + 0.4 * sin(uTime * 2.0 + starNoise * 100.0);
-        star *= smoothstep(-0.02, 0.1, upDot);
-        sky += vec3(0.9, 0.92, 1.0) * star * starMask * 1.2;
+        float star = step(0.99, starNoise); // Fewer, sharper stars
+        star *= 0.5 + 0.5 * sin(uTime * 1.5 + starNoise * 100.0);
+        star *= smoothstep(0.05, 0.25, upDot); // No stars near horizon
+        sky += vec3(0.8, 0.9, 1.0) * star * starMask * 2.0;
     }
 
     // --- Clouds ---
@@ -200,8 +200,10 @@ void main()
     vec3  rayW     = worldRayDir(vUV);
 
     // ---- Procedural sky for far pixels ----
-    float skyMask = smoothstep(0.997, 0.9999, rawD);
-    if (skyMask > 0.01) {
+    // Fix: only draw sky where depth is exactly 1.0 (far plane / cleared depth), 
+    // to prevent buildings from becoming transparent.
+    float skyMask = step(0.99999, rawD);
+    if (skyMask > 0.5) {
         vec3 skyCol = proceduralSky(rayW, normalize(uSunDir), uDayFactor);
         sceneCol = mix(sceneCol, skyCol, skyMask);
     }
