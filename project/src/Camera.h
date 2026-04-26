@@ -26,6 +26,9 @@ public:
     void setMouseSensitivity(float s) { m_mouseSensitivity = std::max(0.01f, s); }
     void setFovDegrees(float f);
 
+    void setPosition(const glm::vec3& pos) { m_position = pos; }
+    void setYawPitch(float yaw, float pitch);
+
     float nearPlane() const { return m_near; }
     float farPlane() const { return m_far; }
 

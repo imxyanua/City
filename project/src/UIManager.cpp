@@ -30,18 +30,23 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
 
     ImGui::Text(u8"FPS: %.0f", static_cast<double>(imguiIo.Framerate));
     ImGui::Separator();
+    const char* cameraModes[] = { u8"Tự do (Free)", u8"Theo dõi xe (Follow)", u8"Camera an ninh (CCTV)" };
+    ImGui::Combo(u8"Góc máy", &opts.cameraMode, cameraModes, IM_ARRAYSIZE(cameraModes));
+    ImGui::Separator();
 
     if (ImGui::BeginTabBar("SettingsTabs")) {
 
         if (ImGui::BeginTabItem(u8"Môi trường")) {
             ImGui::Text(u8"--- Thời gian ---");
-            ImGui::Checkbox(u8"Đồng bộ ánh sáng theo giờ", &opts.syncTimeOfDay);
-            if (opts.syncTimeOfDay) {
-                ImGui::SliderFloat(u8"Giờ (0–24)", &opts.timeOfDayHour, 0.0f, 24.0f, "%.2f");
-                char tbuf[8];
-                formatHourVi(opts.timeOfDayHour, tbuf, sizeof(tbuf));
-                ImGui::Text(u8"Đang chỉnh: %s", tbuf);
-            }
+            ImGui::Checkbox(u8"Đồng bộ thời gian thực", &opts.syncTimeOfDay);
+            
+            ImGui::BeginDisabled(opts.syncTimeOfDay);
+            ImGui::SliderFloat(u8"Giờ (0–24)", &opts.timeOfDayHour, 0.0f, 24.0f, "%.2f");
+            ImGui::EndDisabled();
+            
+            char tbuf[8];
+            formatHourVi(opts.timeOfDayHour, tbuf, sizeof(tbuf));
+            ImGui::Text(u8"Thời gian trong game: %s", tbuf);
             ImGui::Separator();
             ImGui::Text(u8"--- Sương mù ---");
             float fogD = scene.fogDensity();

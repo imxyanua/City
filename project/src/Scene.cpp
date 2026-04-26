@@ -412,8 +412,9 @@ void Scene::update(float dt) {
 }
 
 // ─── draw ────────────────────────────────────────────────────────
-void Scene::drawCars(Shader& shader, const glm::mat4& world) const {
+void Scene::drawCars(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
     for (const auto& c : m_cars) {
+        if (glm::distance(camPos, c.pos) > 150.0f) continue;
         if (c.modelIdx >= (int)m_carModels.size()) continue;
         glm::mat4 model = world;
         model = glm::translate(model, c.pos + glm::vec3(0, m_carYOffset, 0));
@@ -423,9 +424,10 @@ void Scene::drawCars(Shader& shader, const glm::mat4& world) const {
     }
 }
 
-void Scene::drawPedestrians(Shader& shader, const glm::mat4& world) const {
+void Scene::drawPedestrians(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
     shader.setBool("uUseTexture", false);
     for (const auto& pd : m_pedestrians) {
+        if (glm::distance(camPos, pd.pos) > 120.0f) continue;
         glm::mat4 model = world;
         float bob = std::abs(std::sin(pd.walkCycle * PI)) * 0.08f;
         model = glm::translate(model, pd.pos + glm::vec3(0, bob, 0));
@@ -445,9 +447,10 @@ void Scene::drawPedestrians(Shader& shader, const glm::mat4& world) const {
     }
 }
 
-void Scene::drawTrafficLights(Shader& shader, const glm::mat4& world) const {
+void Scene::drawTrafficLights(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
     shader.setBool("uUseTexture", false);
     for (const auto& tl : m_trafficLights) {
+        if (glm::distance(camPos, tl.pos) > 160.0f) continue;
         glm::mat4 base = glm::translate(world, tl.pos);
 
         // Pole (dark metallic gray)
@@ -513,6 +516,7 @@ void Scene::render(Shader& shader, const Camera& camera) const {
     shader.setFloat("uFogBaseHeight", m_fogBaseHeight);
     shader.setFloat("uFogHeightFalloff", m_fogHeightFalloff);
     shader.setFloat("uWetness", m_wetness);
+    shader.setFloat("uLightning", m_lightning);
 
     if (m_debugDrawCarOnly && !m_carModels.empty()) {
         int idx = std::clamp(m_debugCarIndex, 0, (int)m_carModels.size() - 1);
@@ -594,16 +598,17 @@ void Scene::render(Shader& shader, const Camera& camera) const {
 
     for (const glm::mat4& world : m_instanceTransforms) {
         m_cityModel.draw(shader, world);
-        drawCars(shader, world);
-        drawPedestrians(shader, world);
-        drawTrafficLights(shader, world);
-        drawStreetLamps(shader, world);
+        drawCars(shader, world, camera.position());
+        drawPedestrians(shader, world, camera.position());
+        drawTrafficLights(shader, world, camera.position());
+        drawStreetLamps(shader, world, camera.position());
     }
 }
 
-void Scene::drawStreetLamps(Shader& shader, const glm::mat4& world) const {
+void Scene::drawStreetLamps(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
     shader.setBool("uUseTexture", false);
     for (const auto& lamp : m_streetLamps) {
+        if (glm::distance(camPos, lamp.pos) > 180.0f) continue;
         glm::mat4 base = glm::translate(world, lamp.pos);
 
         // Pole (dark metallic)

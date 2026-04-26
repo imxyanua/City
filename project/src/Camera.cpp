@@ -72,6 +72,13 @@ void Camera::setFovDegrees(float f)
     m_fovDeg = std::clamp(f, 15.0f, 90.0f);
 }
 
+void Camera::setYawPitch(float yaw, float pitch)
+{
+    m_yaw = yaw;
+    m_pitch = std::clamp(pitch, -89.0f, 89.0f);
+    updateVectors();
+}
+
 void Camera::updateVectors()
 {
     glm::vec3 dir;

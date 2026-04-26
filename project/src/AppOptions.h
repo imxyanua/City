@@ -26,6 +26,8 @@ struct AppOptions {
     float fxaaIntensity = 1.0f;
     float chromaticAberration = 0.012f;
 
+    int cameraMode = 0; // 0: Free, 1: Follow Car, 2: CCTV
+
     bool useGridLayout = false;
     int gridRows = 2;
     int gridCols = 6;
@@ -44,6 +46,7 @@ inline void saveConfig(const AppOptions& opts, const std::string& path) {
     j["vignetteIntensity"] = opts.vignetteIntensity;
     j["fxaaIntensity"] = opts.fxaaIntensity;
     j["chromaticAberration"] = opts.chromaticAberration;
+    j["cameraMode"] = opts.cameraMode;
 
     std::ofstream o(path);
     if (o.is_open()) {
@@ -66,6 +69,7 @@ inline void loadConfig(AppOptions& opts, const std::string& path) {
         if (j.contains("vignetteIntensity")) opts.vignetteIntensity = j["vignetteIntensity"];
         if (j.contains("fxaaIntensity")) opts.fxaaIntensity = j["fxaaIntensity"];
         if (j.contains("chromaticAberration")) opts.chromaticAberration = j["chromaticAberration"];
+        if (j.contains("cameraMode")) opts.cameraMode = j["cameraMode"];
     } catch (std::exception& e) {
         std::cerr << "Failed to parse config: " << e.what() << std::endl;
     }

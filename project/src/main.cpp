@@ -21,6 +21,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <ctime>
 
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -103,7 +104,9 @@ void mouseCallback(GLFWwindow* window, double x, double y)
     g_keys.lastX = x;
     g_keys.lastY = y;
 
-    ctx->camera->processMouseMovement(xoff, yoff);
+    if (ctx->opts && ctx->opts->cameraMode == 0) {
+        ctx->camera->processMouseMovement(xoff, yoff);
+    }
 }
 
 void scrollCallback(GLFWwindow* window, double xoff, double yoff)
@@ -367,8 +370,21 @@ int main(int argc, char* argv[])
         ImGui::Render();
 
         if (opts.syncTimeOfDay) {
-            applyTimeOfDayHour(scene, opts.timeOfDayHour, opts.clearCol);
+            std::time_t t = std::time(nullptr);
+            std::tm* local_tm = std::localtime(&t);
+            opts.timeOfDayHour = local_tm->tm_hour + local_tm->tm_min / 60.0f + local_tm->tm_sec / 3600.0f;
         }
+        applyTimeOfDayHour(scene, opts.timeOfDayHour, opts.clearCol);
+
+        // --- Lightning Storm ---
+        float lightningIntensity = 0.0f;
+        if (opts.rainIntensity > 0.5f) {
+            float noise = sin(static_cast<float>(now) * 15.0f) * sin(static_cast<float>(now) * 31.0f) * cos(static_cast<float>(now) * 53.0f);
+            if (noise > 0.85f && sin(static_cast<float>(now) * 2.0f) > 0.5f) {
+                lightningIntensity = (noise - 0.85f) * 6.6f; // map 0.85-1.0 to 0-1
+            }
+        }
+        scene.setLightning(lightningIntensity);
 
         {
             static bool menuWas = false;
@@ -380,12 +396,43 @@ int main(int argc, char* argv[])
         }
 
         if (!opts.showMenu || !imguiIo.WantCaptureKeyboard) {
-            if (g_keys.w) camera.processKeyboard(Camera::Forward, g_deltaTime);
-            if (g_keys.s) camera.processKeyboard(Camera::Backward, g_deltaTime);
-            if (g_keys.a) camera.processKeyboard(Camera::Left, g_deltaTime);
-            if (g_keys.d) camera.processKeyboard(Camera::Right, g_deltaTime);
-            if (g_keys.space) camera.processKeyboard(Camera::Up, g_deltaTime);
-            if (g_keys.shift) camera.processKeyboard(Camera::Down, g_deltaTime);
+            if (opts.cameraMode == 0) {
+                if (g_keys.w) camera.processKeyboard(Camera::Forward, g_deltaTime);
+                if (g_keys.s) camera.processKeyboard(Camera::Backward, g_deltaTime);
+                if (g_keys.a) camera.processKeyboard(Camera::Left, g_deltaTime);
+                if (g_keys.d) camera.processKeyboard(Camera::Right, g_deltaTime);
+                if (g_keys.space) camera.processKeyboard(Camera::Up, g_deltaTime);
+                if (g_keys.shift) camera.processKeyboard(Camera::Down, g_deltaTime);
+            }
+        }
+        
+        // --- Auto Camera Modes ---
+        if (opts.cameraMode == 1) { // Follow Car
+            const auto& cars = scene.getCars();
+            if (!cars.empty()) {
+                const auto& car = cars[0]; // Follow the first car
+                glm::vec3 targetPos = car.pos + glm::vec3(0.0f, 1.5f, 0.0f);
+                glm::vec3 camPos = targetPos - car.dir * 6.0f + glm::vec3(0.0f, 2.5f, 0.0f);
+                
+                camera.setPosition(glm::mix(camera.position(), camPos, g_deltaTime * 5.0f));
+                
+                glm::vec3 dir = glm::normalize(targetPos - camera.position());
+                float yaw = glm::degrees(atan2(dir.z, dir.x));
+                float pitch = glm::degrees(asin(dir.y));
+                camera.setYawPitch(yaw, pitch);
+            }
+        } else if (opts.cameraMode == 2) { // CCTV
+            glm::vec3 cctvPos = glm::vec3(12.0f, 15.0f, 12.0f);
+            camera.setPosition(glm::mix(camera.position(), cctvPos, g_deltaTime * 2.0f));
+            
+            glm::vec3 targetPos = glm::vec3(0.0f, 0.0f, 0.0f);
+            glm::vec3 dir = glm::normalize(targetPos - camera.position());
+            
+            float yaw = glm::degrees(atan2(dir.z, dir.x));
+            yaw += sin(static_cast<float>(now) * 0.2f) * 15.0f; // Panning
+            float pitch = glm::degrees(asin(dir.y));
+            
+            camera.setYawPitch(yaw, pitch);
         }
 
         int fbW = 0, fbH = 0;

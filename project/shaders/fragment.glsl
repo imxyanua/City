@@ -21,6 +21,7 @@ uniform float uFogHeightFalloff;
 
 // Wet surface
 uniform float uWetness;
+uniform float uLightning;
 
 // Emissive windows
 uniform float uWindowEmissive;
@@ -259,6 +260,18 @@ vec3 roadMarkings(vec3 worldPos, vec3 N, vec3 baseColor)
         }
     }
 
+    // --- Stop lines ---
+    for(int s = -1; s <= 1; s += 2) {
+        float zStop = float(s) * 7.8;
+        if (abs(wz - zStop) < 0.25 && abs(wx) < 4.8) {
+            markMix = max(markMix, 1.0);
+        }
+        float xStop = float(s) * 7.8;
+        if (abs(wx - xStop) < 0.25 && abs(wz) < 4.8) {
+            markMix = max(markMix, 1.0);
+        }
+    }
+
     return mix(baseColor, white, markMix * 0.85);
 }
 
@@ -300,13 +313,15 @@ void main()
 
     // ---------- Hemisphere ambient ----------
     float hemi    = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3  ambientTerm = albedo * mix(uGroundColor, uSkyColor, hemi);
+    vec3 skyLightning = uSkyColor + vec3(0.8, 0.9, 1.0) * uLightning;
+    vec3  ambientTerm = albedo * mix(uGroundColor, skyLightning, hemi);
 
     // ---------- Wrap diffuse ----------
     const float wrap = 0.12;
     float NdotL = max(dot(N, L), 0.0);
     float diff  = clamp((NdotL + wrap) / (1.0 + wrap), 0.0, 1.0);
-    vec3  diffuseTerm = albedo * uSunColor * diff * (1.0 - shadow);
+    vec3 sunLightning = uSunColor + vec3(2.0, 2.5, 3.0) * uLightning;
+    vec3  diffuseTerm = albedo * sunLightning * diff * (1.0 - shadow);
 
     // ---------- Specular & Puddle Reflection ----------
     float shininess    = mix(48.0, 256.0, max(wetFactor, puddleMask));
@@ -314,12 +329,12 @@ void main()
     if (puddleMask < 0.001) specStrength = mix(0.22, 0.65, wetFactor);
 
     float specMask     = pow(max(dot(N, H), 0.0), shininess);
-    vec3  specularTerm = mix(vec3(1.0), uSunColor * 0.35, 0.5) * specMask * specStrength * (1.0 - shadow);
+    vec3  specularTerm = mix(vec3(1.0), sunLightning * 0.35, 0.5) * specMask * specStrength * (1.0 - shadow);
 
     if (puddleMask > 0.01) {
         vec3 R = reflect(-V, N);
         float upFactor = clamp(R.y, 0.0, 1.0);
-        vec3 envReflect = mix(uGroundColor, uSkyColor, upFactor);
+        vec3 envReflect = mix(uGroundColor, skyLightning, upFactor);
         specularTerm += envReflect * puddleMask * 0.4;
     }
 

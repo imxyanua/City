@@ -66,6 +66,7 @@ public:
     void setCarYOffset(float y) { m_carYOffset = y; }
     int carCount() const { return (int)m_cars.size(); }
     int carModelCount() const { return (int)m_carModels.size(); }
+    const std::vector<Car>& getCars() const { return m_cars; }
 
     Model&       cityModel()       { return m_cityModel; }
     const Model& cityModel() const { return m_cityModel; }
@@ -97,9 +98,11 @@ public:
     float fogHeightFalloff() const    { return m_fogHeightFalloff; }
     void  setFogHeightFalloff(float v){ m_fogHeightFalloff = std::max(0.0f, v); }
 
-    // Wetness
+    // Wetness & Lightning
     float wetness() const             { return m_wetness; }
     void  setWetness(float v)         { m_wetness = std::clamp(v, 0.0f, 1.0f); }
+    float lightning() const           { return m_lightning; }
+    void  setLightning(float v)       { m_lightning = std::max(0.0f, v); }
 
     // Emissive windows
     float windowEmissive() const      { return m_windowEmissive; }
@@ -108,10 +111,10 @@ public:
     void  setDayFactor(float v)       { m_dayFactor = std::clamp(v, 0.0f, 1.0f); }
 
 private:
-    void drawCars(Shader& shader, const glm::mat4& world) const;
-    void drawPedestrians(Shader& shader, const glm::mat4& world) const;
-    void drawTrafficLights(Shader& shader, const glm::mat4& world) const;
-    void drawStreetLamps(Shader& shader, const glm::mat4& world) const;
+    void drawCars(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
+    void drawPedestrians(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
+    void drawTrafficLights(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
+    void drawStreetLamps(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void buildPersonMesh();
     void buildTrafficLightMesh();
     void buildStreetLampMesh();
@@ -152,6 +155,7 @@ private:
     float m_fogHeightFalloff = 0.04f;
 
     float m_wetness        = 0.0f;
+    float m_lightning      = 0.0f;
     float m_windowEmissive = 1.5f;
     float m_dayFactor      = 1.0f;
 };
