@@ -275,6 +275,34 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    const std::filesystem::path shadowVertPath = exeDir / "shaders" / "shadow.vert";
+    const std::filesystem::path shadowFragPath = exeDir / "shaders" / "shadow.frag";
+    Shader shadowShader;
+    if (!shadowShader.loadFromFiles(shadowVertPath.string(), shadowFragPath.string())) {
+        std::cerr << "Shadow shader failed.\n";
+        return 1;
+    }
+
+    // --- Shadow Map Setup ---
+    const unsigned int SHADOW_WIDTH = 2048, SHADOW_HEIGHT = 2048;
+    unsigned int depthMapFBO;
+    glGenFramebuffers(1, &depthMapFBO);
+    unsigned int depthMap;
+    glGenTextures(1, &depthMap);
+    glBindTexture(GL_TEXTURE_2D, depthMap);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+    glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     PostProcessor postProcessor;
     if (!postProcessor.init(exeDir.string())) {
         std::cerr << "PostProcessor init failed.\n";
@@ -302,6 +330,7 @@ int main(int argc, char* argv[])
     camera.setMoveSpeed(25.0f);
 
     AppOptions opts;
+    loadConfig(opts, (exeDir / "config.json").string());
     UIManager uiManager;
     RainSystem rainSystem;
     rainSystem.init(50000);
@@ -362,11 +391,38 @@ int main(int argc, char* argv[])
         int fbW = 0, fbH = 0;
         glfwGetFramebufferSize(window, &fbW, &fbH);
         
+        // --- 1. Render Shadow Map ---
+        glm::mat4 lightProjection, lightView;
+        glm::mat4 lightSpaceMatrix;
+        float near_plane = -50.0f, far_plane = 200.0f;
+        lightProjection = glm::ortho(-80.0f, 80.0f, -80.0f, 80.0f, near_plane, far_plane);
+        glm::vec3 lightDir = scene.lightDir();
+        lightView = glm::lookAt(lightDir * 50.0f, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
+        lightSpaceMatrix = lightProjection * lightView;
+
+        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glCullFace(GL_FRONT); // Avoid peter panning
+        shadowShader.use();
+        shadowShader.setMat4("uLightSpaceMatrix", lightSpaceMatrix);
+        scene.render(shadowShader, camera);
+        glCullFace(GL_BACK);
+
+        // --- 2. Render Main Scene ---
+        glViewport(0, 0, fbW, fbH);
         postProcessor.resize(fbW, fbH);
         postProcessor.beginOffscreen(opts.clearCol);
 
         shader.use();
         shader.setFloat("uTime", static_cast<float>(now));
+        shader.setMat4("uLightSpaceMatrix", lightSpaceMatrix);
+        
+        // Bind shadow map to texture unit 1 (0 is used by models)
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, depthMap);
+        shader.setInt("uShadowMap", 1);
+        
         scene.render(shader, camera);
 
         rainSystem.render(rainShader, camera, opts.rainIntensity, opts.windDir, static_cast<float>(now), fbW, fbH);
@@ -383,6 +439,8 @@ int main(int argc, char* argv[])
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+
+    saveConfig(opts, (exeDir / "config.json").string());
 
     glfwDestroyWindow(window);
     glfwTerminate();

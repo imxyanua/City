@@ -2,6 +2,9 @@
 in vec3 vWorldPos;
 in vec3 vNormal;
 in vec2 vTexCoord;
+in vec4 vFragPosLightSpace;
+
+uniform sampler2D uShadowMap;
 
 uniform vec3  uLightDir;
 uniform vec3  uSkyColor;
@@ -58,6 +61,29 @@ vec3 acesToneMap(vec3 x)
 {
     const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
     return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir)
+{
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    projCoords = projCoords * 0.5 + 0.5;
+    
+    if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 0.0;
+
+    float currentDepth = projCoords.z;
+    float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.001);
+    
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(uShadowMap, 0);
+    for(int x = -1; x <= 1; ++x) {
+        for(int y = -1; y <= 1; ++y) {
+            float pcfDepth = texture(uShadowMap, projCoords.xy + vec2(x, y) * texelSize).r; 
+            shadow += currentDepth - bias > pcfDepth  ? 1.0 : 0.0;        
+        }    
+    }
+    shadow /= 9.0;
+    return shadow * smoothstep(0.0, 0.4, uDayFactor); // Softer shadows at dawn/dusk
 }
 
 float hash2d(vec2 p)
@@ -251,8 +277,16 @@ void main()
     // ---------- Road markings ----------
     albedo = roadMarkings(vWorldPos, N, albedo);
 
-    // ---------- Wet surface ----------
+    // ---------- Wet surface & Puddles ----------
     bool  isGround = N.y > 0.7;
+    float puddleMask = 0.0;
+    if (isGround && uWetness > 0.05) {
+        float n1 = hash2d(floor(vWorldPos.xz * 0.3));
+        float n2 = hash2d(floor(vWorldPos.xz * 1.5 + vec2(15.2, 88.1)));
+        puddleMask = smoothstep(0.45, 0.65, (n1 * 0.6 + n2 * 0.4));
+        puddleMask *= clamp(uWetness * 2.5, 0.0, 1.0);
+    }
+
     float wetFactor = uWetness * (isGround ? 1.0 : 0.35);
     albedo *= mix(1.0, 0.52, wetFactor);
 
@@ -260,6 +294,9 @@ void main()
         float splash = rainSplash(vWorldPos.xz, uTime, uWetness);
         albedo += vec3(0.5, 0.6, 0.7) * splash * 0.5;
     }
+
+    // ---------- Shadow ----------
+    float shadow = ShadowCalculation(vFragPosLightSpace, N, L);
 
     // ---------- Hemisphere ambient ----------
     float hemi    = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
@@ -269,20 +306,29 @@ void main()
     const float wrap = 0.12;
     float NdotL = max(dot(N, L), 0.0);
     float diff  = clamp((NdotL + wrap) / (1.0 + wrap), 0.0, 1.0);
-    vec3  diffuseTerm = albedo * uSunColor * diff;
+    vec3  diffuseTerm = albedo * uSunColor * diff * (1.0 - shadow);
 
-    // ---------- Specular ----------
-    float shininess    = mix(48.0, 196.0, wetFactor);
-    float specStrength = mix(0.22, 0.65, wetFactor);
+    // ---------- Specular & Puddle Reflection ----------
+    float shininess    = mix(48.0, 256.0, max(wetFactor, puddleMask));
+    float specStrength = mix(0.22, 1.2, puddleMask);
+    if (puddleMask < 0.001) specStrength = mix(0.22, 0.65, wetFactor);
+
     float specMask     = pow(max(dot(N, H), 0.0), shininess);
-    vec3  specularTerm = mix(vec3(1.0), uSunColor * 0.35, 0.5) * specMask * specStrength;
+    vec3  specularTerm = mix(vec3(1.0), uSunColor * 0.35, 0.5) * specMask * specStrength * (1.0 - shadow);
+
+    if (puddleMask > 0.01) {
+        vec3 R = reflect(-V, N);
+        float upFactor = clamp(R.y, 0.0, 1.0);
+        vec3 envReflect = mix(uGroundColor, uSkyColor, upFactor);
+        specularTerm += envReflect * puddleMask * 0.4;
+    }
 
     // ---------- Fresnel wet reflection ----------
     float fresnel = 0.0;
-    if (wetFactor > 0.01 && isGround)
+    if (max(wetFactor, puddleMask) > 0.01 && isGround)
     {
         float NdotV = max(dot(N, V), 0.0);
-        fresnel = pow(1.0 - NdotV, 4.0) * wetFactor * 0.55;
+        fresnel = pow(1.0 - NdotV, 4.0) * mix(0.55, 0.85, puddleMask);
     }
 
     vec3 color = ambientTerm + diffuseTerm + specularTerm;
