@@ -5,6 +5,7 @@
 #include "Camera.h"
 #include "Model.h"
 #include "Shader.h"
+#include "ParticleSystem.h"
 
 #include <glm/glm.hpp>
 
@@ -15,10 +16,13 @@ struct Car {
     glm::vec3 pos{0.0f};
     glm::vec3 dir{0.0f, 0.0f, 1.0f};
     float speed = 10.0f;
+    float targetSpeed = 10.0f;
+    float acceleration = 2.0f;
     int modelIdx = 0;
     float scale = 1.0f;
     float rotOffset = 0.0f;
     bool stopped = false;   // stopped at red light?
+    bool isPlayerDriven = false;
 };
 
 struct Pedestrian {
@@ -59,6 +63,7 @@ public:
     void update(float dt);
     void setAspect(float aspect) { m_aspect = aspect; }
     void render(Shader& shader, const Camera& camera) const;
+    void renderParticles(Shader& shader, const Camera& camera);
 
     float carScale() const { return m_carScale; }
     void setCarScale(float s) { m_carScale = s; for(auto& c : m_cars) c.scale = s; }
@@ -67,6 +72,7 @@ public:
     int carCount() const { return (int)m_cars.size(); }
     int carModelCount() const { return (int)m_carModels.size(); }
     const std::vector<Car>& getCars() const { return m_cars; }
+    std::vector<Car>& getCarsRef() { return m_cars; }
 
     Model&       cityModel()       { return m_cityModel; }
     const Model& cityModel() const { return m_cityModel; }
@@ -111,6 +117,8 @@ public:
     void  setDayFactor(float v)       { m_dayFactor = std::clamp(v, 0.0f, 1.0f); }
 
 private:
+    ParticleSystem m_splashSystem;
+
     void drawCars(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void drawPedestrians(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void drawTrafficLights(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;

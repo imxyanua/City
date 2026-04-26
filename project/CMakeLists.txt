@@ -64,6 +64,7 @@ add_executable(CityStreet
   src/RainSystem.cpp
   src/PostProcessor.cpp
   src/UIManager.cpp
+  src/ParticleSystem.cpp
   ${GLAD_DIR}/src/gl.c
   ${IMGUI_DIR}/imgui.cpp
   ${IMGUI_DIR}/imgui_draw.cpp

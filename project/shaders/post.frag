@@ -96,16 +96,7 @@ vec3 proceduralSky(vec3 rd, vec3 sunDir, float dayF)
     sky += vec3(1.0, 0.85, 0.6) * softGlow * 0.15 * clamp(sunElev, 0.0, 1.0);
 
     // --- Stars at night ---
-    if (dayF < 0.4) {
-        float starMask = 1.0 - smoothstep(0.0, 0.4, dayF);
-        vec2 starUV = vec2(atan(rd.z, rd.x) * 20.0, rd.y * 40.0);
-        float starNoise = hash12(floor(starUV));
-        float star = step(0.99, starNoise); // Fewer, sharper stars
-        star *= 0.5 + 0.5 * sin(uTime * 1.5 + starNoise * 100.0);
-        star *= smoothstep(0.05, 0.25, upDot); // No stars near horizon
-        sky += vec3(0.8, 0.9, 1.0) * star * starMask * 2.0;
-    }
-
+    // (Removed because they looked like flashing white artifacts)
     // --- Clouds ---
     if (upDot > 0.0) {
         float cloudHeight = 0.3;

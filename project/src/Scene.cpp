@@ -189,7 +189,10 @@ void Scene::initTrafficAndPedestrians() {
 
     // --- Traffic lights at intersections ---
     m_trafficLights.clear();
+    buildPersonMesh();
     buildTrafficLightMesh();
+    buildStreetLampMesh();
+    m_splashSystem.init();
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -235,6 +238,7 @@ void Scene::initTrafficAndPedestrians() {
             c.speed = disSpeed(gen);
             c.scale = m_carScale;
             c.stopped = false;
+            c.isPlayerDriven = false;
 
             // Spread cars along the lane, far from intersection (±20..±140)
             float spread = 20.0f + static_cast<float>(j) * 45.0f;
@@ -323,14 +327,24 @@ void Scene::update(float dt) {
     static constexpr float INTERSECTION_EXIT = 8.0f; // Past this, car has exited intersection
 
     for (auto& c : m_cars) {
+        if (c.isPlayerDriven) {
+            // Manual speed interpolation for player (ignoring traffic lights/AI)
+            if (c.speed < c.targetSpeed) c.speed = glm::min(c.targetSpeed, c.speed + c.acceleration * 5.0f * dt);
+            else if (c.speed > c.targetSpeed) c.speed = glm::max(c.targetSpeed, c.speed - c.acceleration * 10.0f * dt);
+
+            c.pos += c.dir * (c.speed * dt);
+            if (c.pos.x > CITY_HALF) c.pos.x -= 2*CITY_HALF;
+            if (c.pos.x < -CITY_HALF) c.pos.x += 2*CITY_HALF;
+            if (c.pos.z > CITY_HALF) c.pos.z -= 2*CITY_HALF;
+            if (c.pos.z < -CITY_HALF) c.pos.z += 2*CITY_HALF;
+            continue;
+        }
+
         const bool isNS = (std::abs(c.dir.z) > 0.5f);
         c.stopped = false;
 
         // --- Traffic light stop logic ---
-        // For NS cars: check their Z position relative to the stop line
-        // For EW cars: check their X position relative to the stop line
         if (isNS && !nsGreen) {
-            // NS car, red light: must stop at the stop line
             float carAxis = c.pos.z;
             float stopPos = (c.dir.z > 0) ? -STOP_LINE : STOP_LINE;
             bool approaching = (c.dir.z > 0) ? (carAxis < stopPos) : (carAxis > stopPos);
@@ -354,7 +368,6 @@ void Scene::update(float dt) {
                 if (&c == &other) continue;
                 if (glm::dot(c.dir, other.dir) < 0.9f) continue; // not same direction
 
-                // Must be on the same lane (similar perpendicular coordinate)
                 if (isNS) {
                     if (std::abs(c.pos.x - other.pos.x) > 1.5f) continue;
                 } else {
@@ -363,21 +376,58 @@ void Scene::update(float dt) {
 
                 glm::vec3 toOther = other.pos - c.pos;
                 float ahead = glm::dot(toOther, c.dir);
-                if (ahead > 0.0f && ahead < 8.0f) {
+                if (ahead > 0.0f && ahead < 12.0f) {
+                    c.stopped = true;
+                    break;
+                }
+            }
+        }
+        
+        // --- Anti-collision: pedestrians ---
+        if (!c.stopped) {
+            for (const auto& pd : m_pedestrians) {
+                glm::vec3 toPd = pd.pos - c.pos;
+                float ahead = glm::dot(toPd, c.dir);
+                float side = glm::length(toPd - c.dir * ahead);
+                if (ahead > 0.0f && ahead < 10.0f && side < 2.0f) {
                     c.stopped = true;
                     break;
                 }
             }
         }
 
-        if (!c.stopped) {
-            c.pos += c.dir * (c.speed * dt);
-            if (c.pos.x > CITY_HALF) c.pos.x -= 2*CITY_HALF;
-            if (c.pos.x < -CITY_HALF) c.pos.x += 2*CITY_HALF;
-            if (c.pos.z > CITY_HALF) c.pos.z -= 2*CITY_HALF;
-            if (c.pos.z < -CITY_HALF) c.pos.z += 2*CITY_HALF;
+        // Smooth acceleration/deceleration
+        if (c.stopped) {
+            c.speed = glm::max(0.0f, c.speed - c.acceleration * 3.0f * dt);
+        } else {
+            c.speed = glm::min(c.targetSpeed, c.speed + c.acceleration * dt);
+        }
+
+        c.pos += c.dir * (c.speed * dt);
+        if (c.pos.x > CITY_HALF) c.pos.x -= 2*CITY_HALF;
+        if (c.pos.x < -CITY_HALF) c.pos.x += 2*CITY_HALF;
+        if (c.pos.z > CITY_HALF) c.pos.z -= 2*CITY_HALF;
+        if (c.pos.z < -CITY_HALF) c.pos.z += 2*CITY_HALF;
+
+        // Emit particles
+        if (std::abs(c.speed) > 2.0f && m_wetness > 0.1f) {
+            // Emit behind tires
+            glm::vec3 right = glm::vec3(-c.dir.z, 0.0f, c.dir.x);
+            glm::vec3 tireOffsetL = -c.dir * 1.5f - right * 0.8f;
+            glm::vec3 tireOffsetR = -c.dir * 1.5f + right * 0.8f;
+            glm::vec3 vel = -c.dir * (c.speed * 0.3f) + glm::vec3(0.0f, c.speed * 0.1f, 0.0f);
+            
+            // Randomize velocity a bit
+            vel.x += ((rand() % 100) / 100.0f - 0.5f) * 0.5f;
+            vel.z += ((rand() % 100) / 100.0f - 0.5f) * 0.5f;
+            vel.y += ((rand() % 100) / 100.0f) * 1.0f;
+
+            m_splashSystem.emit(c.pos + tireOffsetL, vel, 0.3f + ((rand() % 100)/100.0f)*0.2f, 0.1f * m_wetness);
+            m_splashSystem.emit(c.pos + tireOffsetR, vel, 0.3f + ((rand() % 100)/100.0f)*0.2f, 0.1f * m_wetness);
         }
     }
+
+    m_splashSystem.update(dt);
 
     // Update pedestrians (stop at red lights before crossing)
     for (auto& pd : m_pedestrians) {
@@ -414,7 +464,8 @@ void Scene::update(float dt) {
 // ─── draw ────────────────────────────────────────────────────────
 void Scene::drawCars(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
     for (const auto& c : m_cars) {
-        if (glm::distance(camPos, c.pos) > 150.0f) continue;
+        glm::vec3 globalPos = glm::vec3(world * glm::vec4(c.pos, 1.0f));
+        if (glm::distance(camPos, globalPos) > 150.0f) continue;
         if (c.modelIdx >= (int)m_carModels.size()) continue;
         glm::mat4 model = world;
         model = glm::translate(model, c.pos + glm::vec3(0, m_carYOffset, 0));
@@ -427,7 +478,8 @@ void Scene::drawCars(Shader& shader, const glm::mat4& world, const glm::vec3& ca
 void Scene::drawPedestrians(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
     shader.setBool("uUseTexture", false);
     for (const auto& pd : m_pedestrians) {
-        if (glm::distance(camPos, pd.pos) > 120.0f) continue;
+        glm::vec3 globalPos = glm::vec3(world * glm::vec4(pd.pos, 1.0f));
+        if (glm::distance(camPos, globalPos) > 120.0f) continue;
         glm::mat4 model = world;
         float bob = std::abs(std::sin(pd.walkCycle * PI)) * 0.08f;
         model = glm::translate(model, pd.pos + glm::vec3(0, bob, 0));
@@ -450,7 +502,8 @@ void Scene::drawPedestrians(Shader& shader, const glm::mat4& world, const glm::v
 void Scene::drawTrafficLights(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
     shader.setBool("uUseTexture", false);
     for (const auto& tl : m_trafficLights) {
-        if (glm::distance(camPos, tl.pos) > 160.0f) continue;
+        glm::vec3 globalPos = glm::vec3(world * glm::vec4(tl.pos, 1.0f));
+        if (glm::distance(camPos, globalPos) > 160.0f) continue;
         glm::mat4 base = glm::translate(world, tl.pos);
 
         // Pole (dark metallic gray)
@@ -597,6 +650,10 @@ void Scene::render(Shader& shader, const Camera& camera) const {
     }
 
     for (const glm::mat4& world : m_instanceTransforms) {
+        // Culling for the entire block
+        glm::vec3 blockPos = glm::vec3(world[3]); 
+        if (glm::distance(camera.position(), blockPos) > 220.0f) continue;
+
         m_cityModel.draw(shader, world);
         drawCars(shader, world, camera.position());
         drawPedestrians(shader, world, camera.position());
@@ -605,10 +662,15 @@ void Scene::render(Shader& shader, const Camera& camera) const {
     }
 }
 
+void Scene::renderParticles(Shader& shader, const Camera& camera) {
+    m_splashSystem.draw(shader, camera, m_aspect);
+}
+
 void Scene::drawStreetLamps(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
     shader.setBool("uUseTexture", false);
     for (const auto& lamp : m_streetLamps) {
-        if (glm::distance(camPos, lamp.pos) > 180.0f) continue;
+        glm::vec3 globalPos = glm::vec3(world * glm::vec4(lamp.pos, 1.0f));
+        if (glm::distance(camPos, globalPos) > 180.0f) continue;
         glm::mat4 base = glm::translate(world, lamp.pos);
 
         // Pole (dark metallic)

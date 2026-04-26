@@ -36,9 +36,9 @@ struct AppContext {
 
 struct KeyState {
     bool w = false, a = false, s = false, d = false;
-    bool space = false, shift = false;
+    bool space = false, shift = false, f = false;
     bool firstMouse = true;
-    double lastX = 0.0, lastY = 0.0;
+    double lastX = 400.0, lastY = 300.0;
 };
 
 KeyState g_keys;
@@ -67,6 +67,17 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
         }
         glfwSetWindowShouldClose(window, GLFW_TRUE);
         return;
+    }
+
+    if (key == GLFW_KEY_F && action == GLFW_PRESS && ctx && ctx->opts && ctx->scene) {
+        auto& cars = ctx->scene->getCarsRef();
+        if (ctx->opts->cameraMode != 3) {
+            ctx->opts->cameraMode = 3;
+            if (!cars.empty()) cars[0].isPlayerDriven = true;
+        } else {
+            ctx->opts->cameraMode = 0;
+            if (!cars.empty()) cars[0].isPlayerDriven = false;
+        }
     }
 
     ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
@@ -286,6 +297,14 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    const std::filesystem::path particleVertPath = exeDir / "shaders" / "particle.vert";
+    const std::filesystem::path particleFragPath = exeDir / "shaders" / "particle.frag";
+    Shader particleShader;
+    if (!particleShader.loadFromFiles(particleVertPath.string(), particleFragPath.string())) {
+        std::cerr << "Particle shader failed.\n";
+        return 1;
+    }
+
     // --- Shadow Map Setup ---
     const unsigned int SHADOW_WIDTH = 2048, SHADOW_HEIGHT = 2048;
     unsigned int depthMapFBO;
@@ -407,14 +426,36 @@ int main(int argc, char* argv[])
         }
         
         // --- Auto Camera Modes ---
-        if (opts.cameraMode == 1) { // Follow Car
-            const auto& cars = scene.getCars();
+        if (opts.cameraMode == 1 || opts.cameraMode == 3) { // Follow Car or Drive
+            auto& cars = scene.getCarsRef();
             if (!cars.empty()) {
-                const auto& car = cars[0]; // Follow the first car
+                auto& car = cars[0]; // Follow the first car
+                
+                if (opts.cameraMode == 3) {
+                    car.isPlayerDriven = true;
+                    if (g_keys.w) car.targetSpeed = 30.0f;
+                    else if (g_keys.s) car.targetSpeed = -15.0f;
+                    else car.targetSpeed = 0.0f;
+
+                    if (abs(car.speed) > 1.0f) {
+                        float steer = 0.0f;
+                        if (g_keys.a) steer = 1.0f;
+                        if (g_keys.d) steer = -1.0f;
+                        float steerMult = (car.speed > 0) ? 1.0f : -1.0f;
+                        car.rotOffset += steer * steerMult * 1.5f * g_deltaTime;
+                        car.dir = glm::vec3(sin(car.rotOffset), 0.0f, cos(car.rotOffset));
+                    }
+                }
+
                 glm::vec3 targetPos = car.pos + glm::vec3(0.0f, 1.5f, 0.0f);
                 glm::vec3 camPos = targetPos - car.dir * 6.0f + glm::vec3(0.0f, 2.5f, 0.0f);
                 
-                camera.setPosition(glm::mix(camera.position(), camPos, g_deltaTime * 5.0f));
+                // Detect wrap-around teleportation to prevent camera "flying" across the map
+                if (glm::distance(camera.position(), camPos) > 40.0f) {
+                    camera.setPosition(camPos);
+                } else {
+                    camera.setPosition(glm::mix(camera.position(), camPos, g_deltaTime * 5.0f));
+                }
                 
                 glm::vec3 dir = glm::normalize(targetPos - camera.position());
                 float yaw = glm::degrees(atan2(dir.z, dir.x));
@@ -473,6 +514,8 @@ int main(int argc, char* argv[])
         scene.render(shader, camera);
 
         rainSystem.render(rainShader, camera, opts.rainIntensity, opts.windDir, static_cast<float>(now), fbW, fbH);
+        
+        scene.renderParticles(particleShader, camera);
 
         postProcessor.renderBloom(opts.bloomThreshold);
         postProcessor.renderPost(camera, scene, opts, static_cast<float>(now));
