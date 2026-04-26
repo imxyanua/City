@@ -30,21 +30,31 @@ void Model::clear()
 
 void Model::draw(Shader& shader, const glm::mat4& world) const
 {
+    if (m_meshes.empty()) return;
+
     shader.setMat4("uModel", world);
+    glm::mat3 normalMat = glm::mat3(glm::transpose(glm::inverse(world)));
+    shader.setMat3("uNormalMatrix", normalMat);
 
     for (const Mesh& mesh : m_meshes) {
-        int mid = mesh.materialIndex();
-        if (mid < 0 || mid >= static_cast<int>(m_materials.size()))
-            mid = 0;
+        if (m_materials.empty()) {
+            // Fallback: no materials — draw with default gray color
+            shader.setBool("uUseTexture", false);
+            shader.setVec4("uBaseColorFactor", glm::vec4(0.6f, 0.6f, 0.6f, 1.0f));
+        } else {
+            int mid = mesh.materialIndex();
+            if (mid < 0 || mid >= static_cast<int>(m_materials.size()))
+                mid = 0;
 
-        const GpuMaterial& mat = m_materials[static_cast<size_t>(mid)];
-        shader.setBool("uUseTexture", mat.useTexture && mat.diffuseTexture != 0);
-        shader.setVec4("uBaseColorFactor", mat.baseColorFactor);
+            const GpuMaterial& mat = m_materials[static_cast<size_t>(mid)];
+            shader.setBool("uUseTexture", mat.useTexture && mat.diffuseTexture != 0);
+            shader.setVec4("uBaseColorFactor", mat.baseColorFactor);
 
-        if (mat.useTexture && mat.diffuseTexture != 0) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, mat.diffuseTexture);
-            shader.setInt("uDiffuseTex", 0);
+            if (mat.useTexture && mat.diffuseTexture != 0) {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, mat.diffuseTexture);
+                shader.setInt("uDiffuseTex", 0);
+            }
         }
 
         mesh.draw();

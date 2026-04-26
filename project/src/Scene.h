@@ -43,6 +43,12 @@ struct TrafficLight {
     bool isGreenEW() const { return phase == TrafficPhase::GreenEW; }
 };
 
+struct StreetLamp {
+    glm::vec3 pos{0.0f};
+    float lightHeight = 6.0f;
+    glm::vec3 lightWorldPos() const { return pos + glm::vec3(0, lightHeight, 0); }
+};
+
 class Scene {
 public:
     bool loadCityModel(const std::string& glbPath);
@@ -105,8 +111,10 @@ private:
     void drawCars(Shader& shader, const glm::mat4& world) const;
     void drawPedestrians(Shader& shader, const glm::mat4& world) const;
     void drawTrafficLights(Shader& shader, const glm::mat4& world) const;
+    void drawStreetLamps(Shader& shader, const glm::mat4& world) const;
     void buildPersonMesh();
     void buildTrafficLightMesh();
+    void buildStreetLampMesh();
 
     Model m_cityModel;
     std::vector<glm::mat4> m_instanceTransforms;
@@ -122,6 +130,11 @@ private:
     Mesh m_trafficLightHead;
     Mesh m_trafficLightBulb;
     std::vector<TrafficLight> m_trafficLights;
+
+    // Street lamps
+    Mesh m_streetLampPole;
+    Mesh m_streetLampHead;
+    std::vector<StreetLamp> m_streetLamps;
 
     float m_aspect = 16.0f / 9.0f;
     float m_carScale = 100.0f;

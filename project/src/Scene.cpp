@@ -4,6 +4,7 @@
 #include <utility>
 #include <cmath>
 #include <cstdlib>
+#include <random>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -162,6 +163,26 @@ void Scene::buildTrafficLightMesh() {
     }
 }
 
+void Scene::buildStreetLampMesh() {
+    // Pole: tall thin cylinder
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addCylinder(p,n,uv,idx, glm::vec3(0, 0, 0), 0.06f, 5.8f, 8);
+        m_streetLampPole.upload(p,n,uv,idx);
+    }
+    // Head: lamp housing + curved arm
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        // Horizontal arm
+        addBox(p,n,uv,idx, glm::vec3(0, 5.9f, 0.3f), glm::vec3(0.04f, 0.04f, 0.35f));
+        // Lamp housing
+        addBox(p,n,uv,idx, glm::vec3(0, 5.8f, 0.6f), glm::vec3(0.15f, 0.06f, 0.15f));
+        // Bulb (small sphere under housing)
+        addSphere(p,n,uv,idx, glm::vec3(0, 5.7f, 0.6f), 0.08f, 6, 4);
+        m_streetLampHead.upload(p,n,uv,idx);
+    }
+}
+
 // ─── init ────────────────────────────────────────────────────────
 void Scene::initTrafficAndPedestrians() {
     if (m_carModels.empty()) return;
@@ -169,6 +190,13 @@ void Scene::initTrafficAndPedestrians() {
     // --- Traffic lights at intersections ---
     m_trafficLights.clear();
     buildTrafficLightMesh();
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> disTLGreen(8, 11);
+    std::uniform_int_distribution<> disBinary(0, 1);
+    std::uniform_int_distribution<> disWalkCycle(0, 99);
+    std::uniform_real_distribution<float> disPedSpeed(0.8f, 1.7f);
 
     // Place traffic lights at the 4 corners of the main intersection (0,0)
     float offsets[] = { -8.0f, 8.0f };
@@ -178,61 +206,86 @@ void Scene::initTrafficAndPedestrians() {
             tl.pos = glm::vec3(ox, 0.0f, oz);
             tl.phase = TrafficPhase::GreenNS;
             tl.timer = 0.0f;
-            tl.greenDuration = 8.0f + (rand()%4);
+            tl.greenDuration = static_cast<float>(disTLGreen(gen));
             tl.yellowDuration = 2.0f;
             m_trafficLights.push_back(tl);
         }
     }
 
-    // --- Cars on lanes ---
-    // NS lanes: x = -3, x = 3 (driving along Z)
-    // EW lanes: z = -3, z = 3 (driving along X)
+    // --- Cars: 12 total (3 per lane), all 3 models guaranteed via round-robin ---
     m_cars.clear();
-    for (int i = 0; i < 40; ++i) {
-        Car c;
-        c.modelIdx = rand() % (int)m_carModels.size();
-        c.speed = 6.0f + (rand() % 10);
-        c.scale = m_carScale;
-        c.stopped = false;
+    const int numModels = static_cast<int>(m_carModels.size());
+    const int carsPerLane = 3;
+    // 4 lanes: NS x=-3 (dir +Z), NS x=3 (dir -Z), EW z=-3 (dir +X), EW z=3 (dir -X)
+    struct LaneDef { float laneCoord; bool isNS; float dirSign; };
+    LaneDef lanes[] = {
+        { -3.0f, true,   1.0f },   // NS lane x=-3, going +Z
+        {  3.0f, true,  -1.0f },   // NS lane x=3,  going -Z
+        { -3.0f, false,  1.0f },   // EW lane z=-3, going +X
+        {  3.0f, false, -1.0f },   // EW lane z=3,  going -X
+    };
+    std::uniform_real_distribution<float> disSpeed(7.0f, 13.0f);
+    int modelCounter = 0;
+    for (const auto& lane : lanes) {
+        for (int j = 0; j < carsPerLane; ++j) {
+            Car c;
+            // Round-robin model assignment: guarantees all 3 models appear
+            c.modelIdx = modelCounter % numModels;
+            modelCounter++;
+            c.speed = disSpeed(gen);
+            c.scale = m_carScale;
+            c.stopped = false;
 
-        if (i % 2 == 0) {
-            // NS lane
-            float lane = (i % 4 < 2) ? -3.0f : 3.0f;
-            float zDir = (lane < 0) ? 1.0f : -1.0f;
-            c.pos = glm::vec3(lane, 0.0f, (float)((rand()%300)-150));
-            c.dir = glm::vec3(0, 0, zDir);
-            c.rotOffset = (zDir > 0) ? 0.0f : PI;
-        } else {
-            // EW lane
-            float lane = (i % 4 < 2) ? -3.0f : 3.0f;
-            float xDir = (lane < 0) ? 1.0f : -1.0f;
-            c.pos = glm::vec3((float)((rand()%300)-150), 0.0f, lane);
-            c.dir = glm::vec3(xDir, 0, 0);
-            c.rotOffset = (xDir > 0) ? PI*0.5f : -PI*0.5f;
+            // Spread cars along the lane, far from intersection (±20..±140)
+            float spread = 20.0f + static_cast<float>(j) * 45.0f;
+            if (lane.isNS) {
+                c.pos = glm::vec3(lane.laneCoord, 0.0f, -lane.dirSign * spread);
+                c.dir = glm::vec3(0.0f, 0.0f, lane.dirSign);
+                c.rotOffset = (lane.dirSign > 0) ? 0.0f : PI;
+            } else {
+                c.pos = glm::vec3(-lane.dirSign * spread, 0.0f, lane.laneCoord);
+                c.dir = glm::vec3(lane.dirSign, 0.0f, 0.0f);
+                c.rotOffset = (lane.dirSign > 0) ? PI * 0.5f : -PI * 0.5f;
+            }
+            m_cars.push_back(c);
         }
-        m_cars.push_back(c);
     }
 
     // --- Pedestrians ---
     buildPersonMesh();
     m_pedestrians.clear();
+    std::uniform_real_distribution<float> disPedPos(-150.0f, 150.0f);
     for (int i = 0; i < 120; ++i) {
         Pedestrian pd;
-        // Walk on sidewalks (offset from road center)
         if (i % 2 == 0) {
-            float sidewalk = (rand()%2==0) ? -7.0f : 7.0f;
-            pd.pos = glm::vec3(sidewalk, 0.0f, (float)((rand()%300)-150));
-            float zDir = (rand()%2==0) ? 1.0f : -1.0f;
+            float sidewalk = (disBinary(gen) == 0) ? -7.0f : 7.0f;
+            pd.pos = glm::vec3(sidewalk, 0.0f, disPedPos(gen));
+            float zDir = (disBinary(gen) == 0) ? 1.0f : -1.0f;
             pd.dir = glm::vec3(0, 0, zDir);
         } else {
-            float sidewalk = (rand()%2==0) ? -7.0f : 7.0f;
-            pd.pos = glm::vec3((float)((rand()%300)-150), 0.0f, sidewalk);
-            float xDir = (rand()%2==0) ? 1.0f : -1.0f;
+            float sidewalk = (disBinary(gen) == 0) ? -7.0f : 7.0f;
+            pd.pos = glm::vec3(disPedPos(gen), 0.0f, sidewalk);
+            float xDir = (disBinary(gen) == 0) ? 1.0f : -1.0f;
             pd.dir = glm::vec3(xDir, 0, 0);
         }
-        pd.speed = 0.8f + (rand()%10)/10.0f;
-        pd.walkCycle = (float)(rand()%100);
+        pd.speed = disPedSpeed(gen);
+        pd.walkCycle = static_cast<float>(disWalkCycle(gen));
         m_pedestrians.push_back(pd);
+    }
+
+    // --- Street lamps along sidewalks ---
+    buildStreetLampMesh();
+    m_streetLamps.clear();
+    const float lampSpacing = 25.0f;
+    for (float z = -125.0f; z <= 125.0f; z += lampSpacing) {
+        m_streetLamps.push_back({{-9.0f, 0.0f, z}});
+        m_streetLamps.push_back({{ 9.0f, 0.0f, z}});
+    }
+    for (float x = -125.0f; x <= 125.0f; x += lampSpacing) {
+        // Skip lamps too close to the NS road lamps
+        if (std::abs(x) < 2.0f) continue;
+        m_streetLamps.push_back({{x, 0.0f, -9.0f}});
+        m_streetLamps.push_back({{x, 0.0f,  9.0f}});
     }
 }
 
@@ -257,48 +310,62 @@ void Scene::update(float dt) {
         }
     }
 
-    // Update cars - check traffic lights
+    // All traffic lights share the same phase (single intersection)
+    bool nsGreen = false;
+    bool ewGreen = false;
+    if (!m_trafficLights.empty()) {
+        nsGreen = m_trafficLights[0].isGreenNS();
+        ewGreen = m_trafficLights[0].isGreenEW();
+    }
+
+    // Stop line positions: cars must stop at ±STOP_LINE before entering intersection
+    static constexpr float STOP_LINE = 6.0f;   // Distance from center (0,0) to stop line
+    static constexpr float INTERSECTION_EXIT = 8.0f; // Past this, car has exited intersection
+
     for (auto& c : m_cars) {
-        bool isNS = (std::abs(c.dir.z) > 0.5f); // driving North-South
+        const bool isNS = (std::abs(c.dir.z) > 0.5f);
         c.stopped = false;
 
-        // Check each traffic light
-        for (const auto& tl : m_trafficLights) {
-            float distToLight;
-            if (isNS) {
-                distToLight = std::abs(c.pos.z - tl.pos.z);
-                // Only care if on same lane side
-                if (std::abs(c.pos.x - tl.pos.x) > 15.0f) continue;
-            } else {
-                distToLight = std::abs(c.pos.x - tl.pos.x);
-                if (std::abs(c.pos.z - tl.pos.z) > 15.0f) continue;
+        // --- Traffic light stop logic ---
+        // For NS cars: check their Z position relative to the stop line
+        // For EW cars: check their X position relative to the stop line
+        if (isNS && !nsGreen) {
+            // NS car, red light: must stop at the stop line
+            float carAxis = c.pos.z;
+            float stopPos = (c.dir.z > 0) ? -STOP_LINE : STOP_LINE;
+            bool approaching = (c.dir.z > 0) ? (carAxis < stopPos) : (carAxis > stopPos);
+            float distToStop = std::abs(carAxis - stopPos);
+            if (approaching && distToStop < 25.0f) {
+                c.stopped = true;
             }
-            // If close to the light and approaching it
-            if (distToLight < STOP_DIST && distToLight > 1.0f) {
-                bool approaching = false;
-                if (isNS) approaching = (c.dir.z > 0 && c.pos.z < tl.pos.z) || (c.dir.z < 0 && c.pos.z > tl.pos.z);
-                else      approaching = (c.dir.x > 0 && c.pos.x < tl.pos.x) || (c.dir.x < 0 && c.pos.x > tl.pos.x);
-
-                if (approaching) {
-                    bool red = isNS ? !tl.isGreenNS() : !tl.isGreenEW();
-                    if (red) { c.stopped = true; break; }
-                }
+        } else if (!isNS && !ewGreen) {
+            float carAxis = c.pos.x;
+            float stopPos = (c.dir.x > 0) ? -STOP_LINE : STOP_LINE;
+            bool approaching = (c.dir.x > 0) ? (carAxis < stopPos) : (carAxis > stopPos);
+            float distToStop = std::abs(carAxis - stopPos);
+            if (approaching && distToStop < 25.0f) {
+                c.stopped = true;
             }
         }
 
-        // Check for other cars ahead in the same lane to avoid merging into each other
+        // --- Anti-collision: check cars ahead on same lane ---
         if (!c.stopped) {
             for (const auto& other : m_cars) {
                 if (&c == &other) continue;
-                // If they are driving in the exact same direction
-                if (glm::dot(c.dir, other.dir) > 0.9f) {
-                    glm::vec3 toOther = other.pos - c.pos;
-                    float dist = glm::length(toOther);
-                    // Safe distance of 10 units (approx 2 car lengths)
-                    if (dist < 10.0f && glm::dot(toOther, c.dir) > 0.0f) {
-                        c.stopped = true;
-                        break;
-                    }
+                if (glm::dot(c.dir, other.dir) < 0.9f) continue; // not same direction
+
+                // Must be on the same lane (similar perpendicular coordinate)
+                if (isNS) {
+                    if (std::abs(c.pos.x - other.pos.x) > 1.5f) continue;
+                } else {
+                    if (std::abs(c.pos.z - other.pos.z) > 1.5f) continue;
+                }
+
+                glm::vec3 toOther = other.pos - c.pos;
+                float ahead = glm::dot(toOther, c.dir);
+                if (ahead > 0.0f && ahead < 8.0f) {
+                    c.stopped = true;
+                    break;
                 }
             }
         }
@@ -312,10 +379,31 @@ void Scene::update(float dt) {
         }
     }
 
-    // Update pedestrians
+    // Update pedestrians (stop at red lights before crossing)
     for (auto& pd : m_pedestrians) {
-        pd.pos += pd.dir * (pd.speed * dt);
-        pd.walkCycle += dt * pd.speed * 2.0f;
+        bool pedStopped = false;
+        // Pedestrians walking along Z (on x=±7 sidewalks)
+        bool walkingZ = (std::abs(pd.dir.z) > 0.5f);
+        // Pedestrians walking along X (on z=±7 sidewalks)
+        bool walkingX = (std::abs(pd.dir.x) > 0.5f);
+
+        // Pedestrians on NS sidewalks crossing EW road: stop if EW has green (cars moving on EW)
+        if (walkingZ && ewGreen) {
+            float distToCrossing = std::abs(pd.pos.z);
+            bool approaching = (pd.dir.z > 0 && pd.pos.z < -5.0f) || (pd.dir.z < 0 && pd.pos.z > 5.0f);
+            if (approaching && distToCrossing < 12.0f) pedStopped = true;
+        }
+        // Pedestrians on EW sidewalks crossing NS road: stop if NS has green
+        if (walkingX && nsGreen) {
+            float distToCrossing = std::abs(pd.pos.x);
+            bool approaching = (pd.dir.x > 0 && pd.pos.x < -5.0f) || (pd.dir.x < 0 && pd.pos.x > 5.0f);
+            if (approaching && distToCrossing < 12.0f) pedStopped = true;
+        }
+
+        if (!pedStopped) {
+            pd.pos += pd.dir * (pd.speed * dt);
+            pd.walkCycle += dt * pd.speed * 2.0f;
+        }
         if (pd.pos.x > CITY_HALF) pd.pos.x -= 2*CITY_HALF;
         if (pd.pos.x < -CITY_HALF) pd.pos.x += 2*CITY_HALF;
         if (pd.pos.z > CITY_HALF) pd.pos.z -= 2*CITY_HALF;
@@ -346,6 +434,7 @@ void Scene::drawPedestrians(Shader& shader, const glm::mat4& world) const {
         float sway = std::sin(pd.walkCycle * PI) * 0.04f;
         model = glm::rotate(model, sway, glm::vec3(0, 0, 1));
         shader.setMat4("uModel", model);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(model))));
         // Clothing color from position hash
         float rV = std::sin(pd.pos.x * 12.9898f) * 43758.5453f;
         float gV = std::sin(pd.pos.z * 78.233f) * 43758.5453f;
@@ -364,11 +453,13 @@ void Scene::drawTrafficLights(Shader& shader, const glm::mat4& world) const {
         // Pole (dark metallic gray)
         shader.setVec4("uBaseColorFactor", glm::vec4(0.25f, 0.25f, 0.27f, 1.0f));
         shader.setMat4("uModel", base);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
         m_trafficLightPole.draw();
 
         // Head housing (dark charcoal)
         shader.setVec4("uBaseColorFactor", glm::vec4(0.08f, 0.08f, 0.08f, 1.0f));
         shader.setMat4("uModel", base);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
         m_trafficLightHead.draw();
 
         // 3 bulbs: Red (top y=5.75), Yellow (mid y=5.35), Green (bot y=4.95)
@@ -382,6 +473,7 @@ void Scene::drawTrafficLights(Shader& shader, const glm::mat4& world) const {
         shader.setVec4("uBaseColorFactor", glm::vec4(redCol, 1.0f));
         glm::mat4 rb = glm::translate(base, glm::vec3(0, 5.75f, bulbZ));
         shader.setMat4("uModel", rb);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(rb))));
         m_trafficLightBulb.draw();
 
         // Yellow bulb
@@ -389,6 +481,7 @@ void Scene::drawTrafficLights(Shader& shader, const glm::mat4& world) const {
         shader.setVec4("uBaseColorFactor", glm::vec4(ylwCol, 1.0f));
         glm::mat4 yb = glm::translate(base, glm::vec3(0, 5.35f, bulbZ));
         shader.setMat4("uModel", yb);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(yb))));
         m_trafficLightBulb.draw();
 
         // Green bulb
@@ -396,6 +489,7 @@ void Scene::drawTrafficLights(Shader& shader, const glm::mat4& world) const {
         shader.setVec4("uBaseColorFactor", glm::vec4(grnCol, 1.0f));
         glm::mat4 gb = glm::translate(base, glm::vec3(0, 4.95f, bulbZ));
         shader.setMat4("uModel", gb);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(gb))));
         m_trafficLightBulb.draw();
     }
 }
@@ -432,10 +526,100 @@ void Scene::render(Shader& shader, const Camera& camera) const {
     shader.setFloat("uWindowEmissive", m_windowEmissive);
     shader.setFloat("uDayFactor", m_dayFactor);
 
+    // --- Headlights + Tail lights ---
+    {
+        const int maxHL = 24;
+        float nightFactor = 1.0f - m_dayFactor;
+        float hlIntensity = nightFactor > 0.15f ? nightFactor * 3.5f : 0.0f;
+        shader.setFloat("uHeadlightIntensity", hlIntensity);
+        shader.setVec3("uHeadlightColor", glm::vec3(1.0f, 0.95f, 0.8f));
+
+        int hlCount = 0;
+        if (hlIntensity > 0.01f) {
+            for (const auto& c : m_cars) {
+                if (hlCount >= maxHL) break;
+                glm::vec3 perp = glm::normalize(glm::cross(c.dir, glm::vec3(0, 1, 0)));
+                glm::vec3 headPos = c.pos + glm::vec3(0, 1.2f, 0) + c.dir * 2.0f;
+                glm::vec3 hlDir = glm::normalize(c.dir + glm::vec3(0, -0.15f, 0));
+
+                shader.setVec3(("uHeadlightPos[" + std::to_string(hlCount) + "]").c_str(), headPos - perp * 0.8f);
+                shader.setVec3(("uHeadlightDir[" + std::to_string(hlCount) + "]").c_str(), hlDir);
+                hlCount++;
+                if (hlCount >= maxHL) break;
+
+                shader.setVec3(("uHeadlightPos[" + std::to_string(hlCount) + "]").c_str(), headPos + perp * 0.8f);
+                shader.setVec3(("uHeadlightDir[" + std::to_string(hlCount) + "]").c_str(), hlDir);
+                hlCount++;
+            }
+        }
+        shader.setInt("uHeadlightCount", hlCount);
+
+        // --- Tail lights (red, brighter when stopped) ---
+        const int maxTL = 24;
+        int tlCount = 0;
+        if (hlIntensity > 0.01f) {
+            for (const auto& c : m_cars) {
+                if (tlCount >= maxTL) break;
+                glm::vec3 perp = glm::normalize(glm::cross(c.dir, glm::vec3(0, 1, 0)));
+                glm::vec3 tailPos = c.pos + glm::vec3(0, 0.8f, 0) - c.dir * 2.0f;
+                float brakeBoost = c.stopped ? 3.0f : 1.0f;
+
+                shader.setVec3(("uTailLightPos[" + std::to_string(tlCount) + "]").c_str(), tailPos - perp * 0.7f);
+                shader.setFloat(("uTailLightBrake[" + std::to_string(tlCount) + "]").c_str(), brakeBoost);
+                tlCount++;
+                if (tlCount >= maxTL) break;
+
+                shader.setVec3(("uTailLightPos[" + std::to_string(tlCount) + "]").c_str(), tailPos + perp * 0.7f);
+                shader.setFloat(("uTailLightBrake[" + std::to_string(tlCount) + "]").c_str(), brakeBoost);
+                tlCount++;
+            }
+        }
+        shader.setInt("uTailLightCount", tlCount);
+        shader.setFloat("uTailLightIntensity", hlIntensity * 0.6f);
+
+        // --- Street lamps ---
+        const int maxSL = 32;
+        int slCount = 0;
+        if (nightFactor > 0.1f) {
+            for (const auto& lamp : m_streetLamps) {
+                if (slCount >= maxSL) break;
+                shader.setVec3(("uStreetLampPos[" + std::to_string(slCount) + "]").c_str(), lamp.lightWorldPos());
+                slCount++;
+            }
+        }
+        shader.setInt("uStreetLampCount", slCount);
+        shader.setFloat("uStreetLampIntensity", nightFactor > 0.1f ? nightFactor * 4.0f : 0.0f);
+        shader.setVec3("uStreetLampColor", glm::vec3(1.0f, 0.82f, 0.45f)); // warm sodium orange
+    }
+
     for (const glm::mat4& world : m_instanceTransforms) {
         m_cityModel.draw(shader, world);
         drawCars(shader, world);
         drawPedestrians(shader, world);
         drawTrafficLights(shader, world);
+        drawStreetLamps(shader, world);
+    }
+}
+
+void Scene::drawStreetLamps(Shader& shader, const glm::mat4& world) const {
+    shader.setBool("uUseTexture", false);
+    for (const auto& lamp : m_streetLamps) {
+        glm::mat4 base = glm::translate(world, lamp.pos);
+
+        // Pole (dark metallic)
+        shader.setVec4("uBaseColorFactor", glm::vec4(0.25f, 0.25f, 0.27f, 1.0f));
+        shader.setMat4("uModel", base);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
+        m_streetLampPole.draw();
+
+        // Lamp head (emissive at night)
+        float nightFactor = 1.0f - m_dayFactor;
+        float emissive = nightFactor > 0.15f ? nightFactor * 5.0f : 0.0f;
+        glm::vec3 lampCol = (emissive > 0.1f)
+            ? glm::vec3(1.0f, 0.82f, 0.45f) * emissive
+            : glm::vec3(0.2f, 0.2f, 0.22f);
+        shader.setVec4("uBaseColorFactor", glm::vec4(lampCol, 1.0f));
+        shader.setMat4("uModel", base);
+        m_streetLampHead.draw();
     }
 }

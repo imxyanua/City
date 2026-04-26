@@ -15,6 +15,9 @@ uniform float uFar;
 
 uniform vec3  uSunDir;
 uniform float uSunIntensity;
+uniform vec3  uSkyColor;
+uniform vec3  uGroundColor;
+uniform float uDayFactor;
 
 // Post controls
 uniform float uBloomIntensity;
@@ -23,6 +26,8 @@ uniform float uGodRayIntensity;
 uniform float uColorGradeIntensity;
 uniform float uVignetteIntensity;
 uniform vec2  uWindDir;
+uniform float uFxaaIntensity;
+uniform float uChromaticAberration;
 
 out vec4 FragColor;
 
@@ -47,11 +52,83 @@ vec3 worldRayDir(vec2 uv)
     return normalize(mat3(uInvView) * normalize(eye.xyz));
 }
 
+// ---------- Procedural Sky ----------
+vec3 proceduralSky(vec3 rd, vec3 sunDir, float dayF)
+{
+    float sunElev = sunDir.y;
+    float upDot = rd.y;
 
+    // --- Sky gradient ---
+    vec3 zenithDay   = vec3(0.25, 0.45, 0.85);
+    vec3 horizonDay  = vec3(0.65, 0.75, 0.90);
+    vec3 zenithNight = vec3(0.01, 0.01, 0.04);
+    vec3 horizonNight= vec3(0.04, 0.04, 0.08);
 
+    vec3 zenith  = mix(zenithNight, zenithDay, dayF);
+    vec3 horizon = mix(horizonNight, horizonDay, dayF);
+    vec3 sky = mix(horizon, zenith, clamp(upDot, 0.0, 1.0));
 
+    // Below horizon — darken toward ground
+    if (upDot < 0.0) {
+        vec3 ground = mix(horizonNight * 0.5, uGroundColor * 0.6, dayF);
+        sky = mix(sky, ground, clamp(-upDot * 3.0, 0.0, 1.0));
+    }
 
-// ---------- God Rays (radial blur from sun) ----------
+    // --- Sunset/sunrise horizon glow ---
+    float horizonGlow = exp(-abs(upDot) * 5.0);
+    float sunCloseness = max(dot(rd, sunDir), 0.0);
+    vec3 sunsetColor = vec3(1.0, 0.45, 0.15);
+    vec3 dawnColor   = vec3(1.0, 0.65, 0.35);
+    vec3 glowCol = mix(sunsetColor, dawnColor, clamp(sunElev * 3.0 + 0.5, 0.0, 1.0));
+    float twilightMask = smoothstep(0.85, 0.0, dayF) * smoothstep(-0.15, 0.15, sunElev);
+    sky += glowCol * horizonGlow * sunCloseness * twilightMask * 1.8;
+    sky += glowCol * horizonGlow * twilightMask * 0.25;
+
+    // --- Sun disc + corona ---
+    float mu = max(dot(rd, sunDir), 0.0);
+    float disc = smoothstep(cos(radians(1.8)), cos(radians(0.5)), mu);
+    float corona = pow(mu, 128.0);
+    float softGlow = pow(mu, 8.0);
+    vec3 sunCol = vec3(1.0, 0.95, 0.85);
+    float sunVis = clamp(sunElev + 0.05, 0.0, 1.0);
+    sky += sunCol * disc * 15.0 * sunVis;
+    sky += sunCol * corona * 3.0 * sunVis;
+    sky += vec3(1.0, 0.85, 0.6) * softGlow * 0.15 * clamp(sunElev, 0.0, 1.0);
+
+    // --- Stars at night ---
+    if (dayF < 0.35) {
+        float starMask = 1.0 - smoothstep(0.0, 0.35, dayF);
+        vec2 starUV = vec2(atan(rd.z, rd.x) * 15.0, rd.y * 30.0);
+        float starNoise = hash12(floor(starUV));
+        float star = step(0.985, starNoise);
+        star *= 0.6 + 0.4 * sin(uTime * 2.0 + starNoise * 100.0);
+        star *= smoothstep(-0.02, 0.1, upDot);
+        sky += vec3(0.9, 0.92, 1.0) * star * starMask * 1.2;
+    }
+
+    // --- Clouds ---
+    if (upDot > 0.0) {
+        float cloudHeight = 0.3;
+        vec2 cloudUV = rd.xz / (rd.y + cloudHeight) * 8.0;
+        cloudUV += uWindDir * uTime * 0.005;
+        float c1 = hash12(floor(cloudUV * 1.0));
+        float c2 = hash12(floor(cloudUV * 2.0 + 7.3));
+        float cloud = smoothstep(0.55, 0.7, c1 * 0.6 + c2 * 0.4);
+        cloud *= smoothstep(0.0, 0.15, upDot);
+        vec3 cloudCol = mix(vec3(0.04), vec3(0.9, 0.92, 0.95), dayF);
+        cloudCol = mix(cloudCol, glowCol * 1.3, twilightMask * cloud * 0.5);
+        sky = mix(sky, cloudCol, cloud * 0.35);
+        // Heavy overcast when raining
+        if (uRainIntensity > 0.1) {
+            float rainCloud = smoothstep(0.35, 0.5, c1 * 0.5 + c2 * 0.5) * uRainIntensity;
+            sky = mix(sky, vec3(0.25, 0.27, 0.3) * dayF, rainCloud * 0.6);
+        }
+    }
+
+    return sky;
+}
+
+// ---------- God Rays ----------
 vec3 godRays(vec2 uv)
 {
     if (uGodRayIntensity < 0.01 || uSunIntensity < 0.01) return vec3(0.0);
@@ -73,28 +150,64 @@ vec3 godRays(vec2 uv)
     return vec3(1.0, 0.94, 0.82) * uSunIntensity * illum * uGodRayIntensity * 2.5;
 }
 
+// ---------- Simplified FXAA ----------
+vec3 applyFXAA(vec2 uv)
+{
+    vec2 texel = 1.0 / uResolution;
+    vec3 col   = texture(uScene, uv).rgb;
+    float lumaM  = dot(col, vec3(0.299, 0.587, 0.114));
+    float lumaN  = dot(texture(uScene, uv + vec2(0, texel.y)).rgb, vec3(0.299, 0.587, 0.114));
+    float lumaS  = dot(texture(uScene, uv - vec2(0, texel.y)).rgb, vec3(0.299, 0.587, 0.114));
+    float lumaE  = dot(texture(uScene, uv + vec2(texel.x, 0)).rgb, vec3(0.299, 0.587, 0.114));
+    float lumaW  = dot(texture(uScene, uv - vec2(texel.x, 0)).rgb, vec3(0.299, 0.587, 0.114));
+
+    float lumaMin = min(lumaM, min(min(lumaN, lumaS), min(lumaE, lumaW)));
+    float lumaMax = max(lumaM, max(max(lumaN, lumaS), max(lumaE, lumaW)));
+    float contrast = lumaMax - lumaMin;
+
+    if (contrast < 0.03) return col;
+
+    float edgeFilter = abs(lumaN + lumaS + lumaE + lumaW - 4.0 * lumaM);
+    edgeFilter = clamp(edgeFilter / contrast, 0.0, 1.0);
+    float blend = smoothstep(0.0, 1.0, edgeFilter) * 0.75;
+
+    bool isHorizontal = abs(lumaN + lumaS - 2.0 * lumaM) >= abs(lumaE + lumaW - 2.0 * lumaM);
+    vec2 dir = isHorizontal ? vec2(texel.x, 0.0) : vec2(0.0, texel.y);
+
+    vec3 col1 = texture(uScene, uv - dir).rgb;
+    vec3 col2 = texture(uScene, uv + dir).rgb;
+    return mix(col, (col1 + col2) * 0.5, blend);
+}
+
 void main()
 {
-    vec3  sceneCol = texture(uScene, vUV).rgb;
+    // ---- FXAA ----
+    vec3  sceneCol = (uFxaaIntensity > 0.01) ? applyFXAA(vUV) : texture(uScene, vUV).rgb;
+
+    // ---- Chromatic Aberration ----
+    if (uChromaticAberration > 0.001)
+    {
+        vec2 center = vUV - 0.5;
+        float dist2 = dot(center, center);
+        float caStrength = uChromaticAberration * dist2 * 2.0;
+        vec2 caOffset = center * caStrength;
+        sceneCol.r = texture(uScene, vUV + caOffset).r;
+        sceneCol.b = texture(uScene, vUV - caOffset).b;
+    }
+
     float rawD     = texture(uDepth, vUV).r;
     float linearD  = linearizeDepth(rawD);
     vec3  rayW     = worldRayDir(vUV);
 
+    // ---- Procedural sky for far pixels ----
+    float skyMask = smoothstep(0.997, 0.9999, rawD);
+    if (skyMask > 0.01) {
+        vec3 skyCol = proceduralSky(rayW, normalize(uSunDir), uDayFactor);
+        sceneCol = mix(sceneCol, skyCol, skyMask);
+    }
+
     // ---- Bloom composite ----
     sceneCol += texture(uBloom, vUV).rgb * uBloomIntensity;
-
-    // ---- Sun disc + corona ----
-    if (uSunIntensity > 0.001)
-    {
-        float skyMask = smoothstep(0.997, 0.9999, rawD)
-                      * smoothstep(uFar * 0.35, uFar * 0.92, linearD);
-        vec3  sdir = normalize(uSunDir);
-        float mu   = max(dot(rayW, sdir), 0.0);
-        float disc = smoothstep(cos(radians(7.5)), cos(radians(2.8)), mu) * uSunIntensity * skyMask;
-        float corona = pow(mu, 96.0) * uSunIntensity * skyMask;
-        sceneCol += vec3(1.0, 0.94, 0.82) * disc * 3.2;
-        sceneCol += vec3(1.0, 0.88, 0.65) * corona * 1.4;
-    }
 
     // ---- God Rays ----
     sceneCol += godRays(vUV);
@@ -102,12 +215,11 @@ void main()
     // ---- Wetness Desaturation ----
     if (uRainIntensity > 0.001)
     {
-        // Wet desaturation and tinting
         sceneCol *= 1.0 - uRainIntensity * 0.12;
         sceneCol  = mix(sceneCol, sceneCol * vec3(0.95, 0.98, 1.04), uRainIntensity * 0.2);
     }
 
-    // ---- Color Grading (urban rainy mood) ----
+    // ---- Color Grading ----
     if (uColorGradeIntensity > 0.01)
     {
         float luma = dot(sceneCol, vec3(0.2126, 0.7152, 0.0722));
@@ -126,7 +238,7 @@ void main()
         sceneCol *= vig;
     }
 
-    // ---- Film Grain (subtle) ----
+    // ---- Film Grain ----
     sceneCol += (hash12(vUV * uResolution + vec2(uTime * 100.0, 0.0)) - 0.5) * 0.022;
 
     FragColor = vec4(max(sceneCol, vec3(0.0)), 1.0);
