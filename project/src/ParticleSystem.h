@@ -11,6 +11,8 @@ struct Particle {
     float life;
     float maxLife;
     float size;
+    float gravity;
+    int type; // 0: Rain, 1: Smoke
 };
 
 class ParticleSystem {
@@ -21,7 +23,7 @@ public:
     void init();
     void update(float dt);
     void draw(Shader& shader, const Camera& camera, float aspect);
-    void emit(const glm::vec3& pos, const glm::vec3& vel, float life, float size);
+    void emit(const glm::vec3& pos, const glm::vec3& vel, float life, float size, float gravity = 9.8f, int type = 0);
 
 private:
     std::vector<Particle> m_particles;

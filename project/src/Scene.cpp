@@ -198,6 +198,14 @@ void Scene::buildTrafficLightMesh() {
         addSphere(p,n,uv,idx, glm::vec3(0, 0, 0), 0.1f, 8, 6);
         m_trafficLightBulb.upload(p,n,uv,idx);
     }
+
+    // Overhead pole: Vertical part + Horizontal part
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addBox(p,n,uv,idx, glm::vec3(6.5f, 3.5f, -6.5f), glm::vec3(0.15f, 3.5f, 0.15f)); // Vertical
+        addBox(p,n,uv,idx, glm::vec3(0.0f, 7.0f, -6.5f), glm::vec3(6.5f, 0.1f, 0.1f));  // Horizontal extension
+        m_trafficPoleMesh.upload(p,n,uv,idx);
+    }
 }
 
 void Scene::buildStreetLampMesh() {
@@ -218,6 +226,36 @@ void Scene::buildStreetLampMesh() {
         addSphere(p,n,uv,idx, glm::vec3(0, 5.7f, 0.6f), 0.08f, 6, 4);
         m_streetLampHead.upload(p,n,uv,idx);
     }
+}
+
+void Scene::buildPigeonMesh() {
+    // Simple V-shape for pigeon body/wings
+    std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+    
+    auto pushV=[&](glm::vec3 vv, glm::vec3 nn, glm::vec2 u){ 
+        p.push_back(vv.x);p.push_back(vv.y);p.push_back(vv.z);
+        n.push_back(nn.x);n.push_back(nn.y);n.push_back(nn.z); 
+        uv.push_back(u.x);uv.push_back(u.y);
+    };
+
+    // Left wing
+    pushV(glm::vec3(0.0f, 0.0f, -0.1f), glm::vec3(0, 1, 0), glm::vec2(0,0));
+    pushV(glm::vec3(-0.2f, 0.05f, -0.0f), glm::vec3(0, 1, 0), glm::vec2(0,1));
+    pushV(glm::vec3(0.0f, 0.0f, 0.1f), glm::vec3(0, 1, 0), glm::vec2(1,1));
+    // Right wing
+    pushV(glm::vec3(0.0f, 0.0f, -0.1f), glm::vec3(0, 1, 0), glm::vec2(0,0));
+    pushV(glm::vec3(0.0f, 0.0f, 0.1f), glm::vec3(0, 1, 0), glm::vec2(1,1));
+    pushV(glm::vec3(0.2f, 0.05f, 0.0f), glm::vec3(0, 1, 0), glm::vec2(1,0));
+    
+    idx = {0, 1, 2, 3, 4, 5};
+    m_pigeonMesh.upload(p,n,uv,idx);
+}
+
+void Scene::buildNeonSignMesh() {
+    // Simple vertical/horizontal box for neon sign
+    std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+    addBox(p,n,uv,idx, glm::vec3(0,0,0), glm::vec3(0.5f, 2.0f, 0.1f));
+    m_neonSignMesh.upload(p,n,uv,idx);
 }
 
 // ─── init ────────────────────────────────────────────────────────
@@ -328,6 +366,30 @@ void Scene::initTrafficAndPedestrians() {
         m_streetLamps.push_back({{x, 0.0f, -9.0f}});
         m_streetLamps.push_back({{x, 0.0f,  9.0f}});
     }
+
+    // --- Pigeons ---
+    buildPigeonMesh();
+    m_pigeons.clear();
+    std::uniform_real_distribution<float> disPigeonX(-30.0f, 30.0f);
+    std::uniform_real_distribution<float> disPigeonZ(-30.0f, 30.0f);
+    std::uniform_real_distribution<float> disTimer(0.0f, 2.0f);
+    for (int i = 0; i < 30; ++i) {
+        Pigeon pg;
+        pg.pos = glm::vec3(disPigeonX(gen), 0.05f, disPigeonZ(gen));
+        pg.vel = glm::vec3(0);
+        pg.state = 0; // pecking
+        pg.timer = disTimer(gen);
+        pg.flapPhase = 0;
+        m_pigeons.push_back(pg);
+    }
+
+    // --- Neon Signs ---
+    buildNeonSignMesh();
+    m_neonSigns.clear();
+    // Add neon signs on some building walls
+    m_neonSigns.push_back({{ -10.0f, 3.0f, -15.0f }, glm::vec3(1.0f), glm::vec3(1.0f, 0.2f, 0.8f), 0.5f}); // Pink
+    m_neonSigns.push_back({{  10.0f, 4.0f, -25.0f }, glm::vec3(1.2f), glm::vec3(0.2f, 0.8f, 1.0f), 0.3f}); // Cyan
+    m_neonSigns.push_back({{ -12.0f, 5.0f,  20.0f }, glm::vec3(0.8f), glm::vec3(0.8f, 1.0f, 0.2f), 0.8f}); // Yellow
 }
 
 // ─── update ──────────────────────────────────────────────────────
@@ -496,6 +558,42 @@ void Scene::update(float dt) {
         if (pd.pos.z > CITY_HALF) pd.pos.z -= 2*CITY_HALF;
         if (pd.pos.z < -CITY_HALF) pd.pos.z += 2*CITY_HALF;
     }
+
+    // --- Pigeons Update ---
+    for (auto& pg : m_pigeons) {
+        pg.timer -= dt;
+        if (pg.state == 0) { // Pecking
+            if (pg.timer <= 0) {
+                pg.timer = 0.5f + ((rand() % 100) / 100.0f) * 1.5f;
+            }
+            // Check for nearby cars or pedestrians to trigger escape
+            bool scared = false;
+            for (const auto& c : m_cars) {
+                if (glm::distance(c.pos, pg.pos) < 6.0f) { scared = true; break; }
+            }
+            if (!scared) {
+                for (const auto& pd : m_pedestrians) {
+                    if (glm::distance(pd.pos, pg.pos) < 4.0f) { scared = true; break; }
+                }
+            }
+            if (scared) {
+                pg.state = 1; // Fly
+                pg.vel = glm::vec3(((rand() % 100)/100.0f - 0.5f) * 4.0f, 4.0f + ((rand() % 100)/100.0f)*2.0f, ((rand() % 100)/100.0f - 0.5f) * 4.0f);
+            }
+        } else if (pg.state == 1) { // Flying
+            pg.pos += pg.vel * dt;
+            pg.vel.y += 2.0f * dt; // accelerate upwards
+            pg.flapPhase += dt * 15.0f;
+            if (pg.pos.y > 20.0f) {
+                // Reset pigeon
+                pg.state = 0;
+                pg.pos.y = 0.05f;
+                pg.pos.x = ((rand() % 100) / 100.0f - 0.5f) * 60.0f;
+                pg.pos.z = ((rand() % 100) / 100.0f - 0.5f) * 60.0f;
+                pg.timer = 1.0f + ((rand() % 100)/100.0f)*2.0f;
+            }
+        }
+    }
 }
 
 // ─── draw ────────────────────────────────────────────────────────
@@ -644,6 +742,7 @@ void Scene::drawTrafficLights(Shader& shader, const glm::mat4& world, const glm:
         shader.setMat4("uModel", base);
         shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
         m_trafficLightPole.draw();
+        m_trafficPoleMesh.draw();
 
         // Head housing (dark charcoal)
         shader.setVec4("uBaseColorFactor", glm::vec4(0.08f, 0.08f, 0.08f, 1.0f));
@@ -792,6 +891,8 @@ void Scene::render(Shader& shader, const Camera& camera) const {
         drawPedestrians(shader, world, camera.position());
         drawTrafficLights(shader, world, camera.position());
         drawStreetLamps(shader, world, camera.position());
+        drawPigeons(shader, world, camera.position());
+        drawNeonSigns(shader, world, camera.position());
     }
 }
 
@@ -821,5 +922,58 @@ void Scene::drawStreetLamps(Shader& shader, const glm::mat4& world, const glm::v
         shader.setVec4("uBaseColorFactor", glm::vec4(lampCol, 1.0f));
         shader.setMat4("uModel", base);
         m_streetLampHead.draw();
+    }
+}
+
+void Scene::drawPigeons(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
+    shader.setBool("uUseTexture", false);
+    shader.setVec4("uBaseColorFactor", glm::vec4(0.4f, 0.4f, 0.45f, 1.0f)); // Greyish blue
+    for (const auto& pg : m_pigeons) {
+        glm::vec3 globalPos = glm::vec3(world * glm::vec4(pg.pos, 1.0f));
+        if (glm::distance(camPos, globalPos) > 100.0f) continue;
+        
+        glm::mat4 base = glm::translate(world, pg.pos);
+        // orient to velocity if flying, else random
+        if (pg.state == 1 && glm::length(pg.vel) > 0.1f) {
+            float angle = atan2(pg.vel.x, pg.vel.z);
+            base = glm::rotate(base, angle, glm::vec3(0, 1, 0));
+            // Tilt based on flap phase
+            float flap = sin(pg.flapPhase);
+            base = glm::scale(base, glm::vec3(1.0f, 1.0f + flap * 0.5f, 1.0f));
+        } else {
+            // Pecking animation
+            float angle = pg.pos.x * 12.0f; // pseudo-random orientation
+            base = glm::rotate(base, angle, glm::vec3(0, 1, 0));
+            float peck = (pg.timer > 0.0f && pg.timer < 0.2f) ? sin(pg.timer * 30.0f) * 0.5f : 0.0f;
+            base = glm::rotate(base, peck, glm::vec3(1, 0, 0));
+        }
+        shader.setMat4("uModel", base);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
+        m_pigeonMesh.draw();
+    }
+}
+
+void Scene::drawNeonSigns(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
+    shader.setBool("uUseTexture", false);
+    for (const auto& ns : m_neonSigns) {
+        glm::vec3 globalPos = glm::vec3(world * glm::vec4(ns.pos, 1.0f));
+        if (glm::distance(camPos, globalPos) > 150.0f) continue;
+        
+        glm::mat4 base = glm::translate(world, ns.pos);
+        base = glm::scale(base, ns.scale);
+        
+        // Flicker logic using global dayFactor or random
+        float flicker = sin(globalPos.x * 5.0f + m_dayFactor * 100.0f * ns.flickerSpeed);
+        flicker = (flicker > 0.8f) ? 0.2f : 1.0f; // occasional off
+        
+        // Emissive in dark
+        float nightFactor = 1.0f - m_dayFactor;
+        float emissive = nightFactor > 0.1f ? nightFactor * 8.0f * flicker : 0.0f;
+        glm::vec3 col = ns.color * (0.2f + emissive);
+        
+        shader.setVec4("uBaseColorFactor", glm::vec4(col, 1.0f));
+        shader.setMat4("uModel", base);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
+        m_neonSignMesh.draw();
     }
 }

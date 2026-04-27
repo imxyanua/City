@@ -32,6 +32,21 @@ struct Pedestrian {
     float walkCycle = 0.0f;
 };
 
+struct Pigeon {
+    glm::vec3 pos;
+    glm::vec3 vel;
+    int state; // 0 = pecking, 1 = flying
+    float timer;
+    float flapPhase;
+};
+
+struct NeonSign {
+    glm::vec3 pos;
+    glm::vec3 scale;
+    glm::vec3 color;
+    float flickerSpeed;
+};
+
 enum class TrafficPhase { GreenNS, YellowNS, GreenEW, YellowEW };
 
 struct TrafficLight {
@@ -123,9 +138,13 @@ private:
     void drawPedestrians(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void drawTrafficLights(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void drawStreetLamps(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
+    void drawPigeons(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
+    void drawNeonSigns(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void buildPedestrianMeshes();
     void buildTrafficLightMesh();
     void buildStreetLampMesh();
+    void buildPigeonMesh();
+    void buildNeonSignMesh();
 
     Model m_cityModel;
     std::vector<glm::mat4> m_instanceTransforms;
@@ -152,6 +171,14 @@ private:
     Mesh m_streetLampPole;
     Mesh m_streetLampHead;
     std::vector<StreetLamp> m_streetLamps;
+
+    Mesh m_pigeonMesh;
+    std::vector<Pigeon> m_pigeons;
+
+    Mesh m_neonSignMesh;
+    std::vector<NeonSign> m_neonSigns;
+
+    Mesh m_trafficPoleMesh;
 
     float m_aspect = 16.0f / 9.0f;
     float m_carScale = 100.0f;

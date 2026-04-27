@@ -6,6 +6,7 @@
 #include "RainSystem.h"
 #include "PostProcessor.h"
 #include "UIManager.h"
+#include "ParticleSystem.h"
 
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
@@ -357,6 +358,9 @@ int main(int argc, char* argv[])
     RainSystem rainSystem;
     rainSystem.init(50000);
 
+    ParticleSystem smokeSystem;
+    smokeSystem.init();
+
     applyTimeOfDayHour(scene, opts.timeOfDayHour, opts.clearCol);
 
     AppContext ctx;
@@ -381,6 +385,19 @@ int main(int argc, char* argv[])
 
         scene.update(g_deltaTime);
 
+        // Emit smoke
+        static float smokeTimer = 0.0f;
+        smokeTimer += g_deltaTime;
+        if (smokeTimer > 0.05f) {
+            smokeTimer = 0.0f;
+            // Emit from a sewer grate location (e.g. at intersection x=2.0, z=2.0)
+            float velX = ((rand() % 100) / 100.0f - 0.5f) * 0.5f;
+            float velZ = ((rand() % 100) / 100.0f - 0.5f) * 0.5f;
+            smokeSystem.emit(glm::vec3(2.0f, 0.0f, 2.0f), glm::vec3(velX, 1.5f, velZ), 3.0f, 1.0f, -0.5f, 1);
+            smokeSystem.emit(glm::vec3(-2.0f, 0.0f, -6.0f), glm::vec3(velX, 1.2f, velZ), 2.5f, 0.8f, -0.4f, 1);
+        }
+        smokeSystem.update(g_deltaTime);
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
@@ -390,8 +407,9 @@ int main(int argc, char* argv[])
 
         if (opts.syncTimeOfDay) {
             std::time_t t = std::time(nullptr);
-            std::tm* local_tm = std::localtime(&t);
-            opts.timeOfDayHour = local_tm->tm_hour + local_tm->tm_min / 60.0f + local_tm->tm_sec / 3600.0f;
+            std::tm local_tm;
+            localtime_s(&local_tm, &t);
+            opts.timeOfDayHour = local_tm.tm_hour + local_tm.tm_min / 60.0f + local_tm.tm_sec / 3600.0f;
         }
         applyTimeOfDayHour(scene, opts.timeOfDayHour, opts.clearCol);
 
@@ -531,6 +549,9 @@ int main(int argc, char* argv[])
         rainSystem.render(rainShader, camera, opts.rainIntensity, opts.windDir, static_cast<float>(now), fbW, fbH);
         
         scene.renderParticles(particleShader, camera);
+
+        particleShader.use();
+        smokeSystem.draw(particleShader, camera, (float)fbW / (float)fbH);
 
         postProcessor.renderBloom(opts.bloomThreshold);
         postProcessor.renderPost(camera, scene, opts, static_cast<float>(now));
