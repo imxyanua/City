@@ -26,7 +26,7 @@ struct AppOptions {
     float fxaaIntensity = 1.0f;
     float chromaticAberration = 0.012f;
 
-    int cameraMode = 0; // 0: Free, 1: Follow Car, 2: CCTV
+    int cameraMode = 0; // 0: Free, 1: Follow Car, 2: CCTV, 3: Drive, 4: Cinematic
 
     bool useGridLayout = false;
     int gridRows = 2;

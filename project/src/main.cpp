@@ -474,6 +474,21 @@ int main(int argc, char* argv[])
             float pitch = glm::degrees(asin(dir.y));
             
             camera.setYawPitch(yaw, pitch);
+        } else if (opts.cameraMode == 4) { // Cinematic
+            float t = static_cast<float>(now) * 0.15f;
+            float radius = 60.0f + sin(t * 0.8f) * 30.0f;
+            float height = 25.0f + cos(t * 1.3f) * 15.0f;
+            
+            glm::vec3 cinePos = glm::vec3(sin(t) * radius, height, cos(t) * radius);
+            camera.setPosition(glm::mix(camera.position(), cinePos, g_deltaTime * 1.5f));
+            
+            glm::vec3 targetPos = glm::vec3(0.0f, 5.0f, 0.0f); // Look slightly above ground center
+            glm::vec3 dir = glm::normalize(targetPos - camera.position());
+            
+            float yaw = glm::degrees(atan2(dir.z, dir.x));
+            float pitch = glm::degrees(asin(dir.y));
+            
+            camera.setYawPitch(yaw, pitch);
         }
 
         int fbW = 0, fbH = 0;

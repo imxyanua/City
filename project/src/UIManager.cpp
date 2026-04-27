@@ -30,7 +30,7 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
 
     ImGui::Text(u8"FPS: %.0f", static_cast<double>(imguiIo.Framerate));
     ImGui::Separator();
-    const char* cameraModes[] = { u8"Tự do (Free)", u8"Theo dõi xe (Follow)", u8"Camera an ninh (CCTV)" };
+    const char* cameraModes[] = { u8"Tự do (Free)", u8"Theo dõi xe (Follow)", u8"Camera an ninh (CCTV)", u8"Lái xe (Drive)", u8"Quay phim (Cinematic)" };
     ImGui::Combo(u8"Góc máy", &opts.cameraMode, cameraModes, IM_ARRAYSIZE(cameraModes));
     ImGui::Separator();
 
