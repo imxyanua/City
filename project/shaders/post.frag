@@ -124,19 +124,19 @@ vec3 godRays(vec2 uv)
 {
     if (uGodRayIntensity < 0.01 || uSunIntensity < 0.01) return vec3(0.0);
 
-    vec2  delta = (uv - uSunScreenPos) / 64.0;
+    vec2  delta = (uv - uSunScreenPos) / 32.0;
     vec2  sUV   = uv;
     float illum = 0.0;
     float w     = 1.0;
 
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 32; i++)
     {
         sUV -= delta;
         float sd = texture(uDepth, clamp(sUV, 0.001, 0.999)).r;
         illum += smoothstep(0.997, 0.9999, sd) * w;
-        w *= 0.975;
+        w *= 0.95;
     }
-    illum /= 64.0;
+    illum /= 32.0;
 
     return vec3(1.0, 0.94, 0.82) * uSunIntensity * illum * uGodRayIntensity * 2.5;
 }

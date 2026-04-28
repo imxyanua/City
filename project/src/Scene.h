@@ -178,8 +178,6 @@ private:
     Mesh m_neonSignMesh;
     std::vector<NeonSign> m_neonSigns;
 
-    Mesh m_trafficPoleMesh;
-
     float m_aspect = 16.0f / 9.0f;
     float m_carScale = 100.0f;
     float m_carYOffset = 0.0f;

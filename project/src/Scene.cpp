@@ -199,13 +199,6 @@ void Scene::buildTrafficLightMesh() {
         m_trafficLightBulb.upload(p,n,uv,idx);
     }
 
-    // Overhead pole: Vertical part + Horizontal part
-    {
-        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
-        addBox(p,n,uv,idx, glm::vec3(6.5f, 3.5f, -6.5f), glm::vec3(0.15f, 3.5f, 0.15f)); // Vertical
-        addBox(p,n,uv,idx, glm::vec3(0.0f, 7.0f, -6.5f), glm::vec3(6.5f, 0.1f, 0.1f));  // Horizontal extension
-        m_trafficPoleMesh.upload(p,n,uv,idx);
-    }
 }
 
 void Scene::buildStreetLampMesh() {
@@ -742,7 +735,6 @@ void Scene::drawTrafficLights(Shader& shader, const glm::mat4& world, const glm:
         shader.setMat4("uModel", base);
         shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
         m_trafficLightPole.draw();
-        m_trafficPoleMesh.draw();
 
         // Head housing (dark charcoal)
         shader.setVec4("uBaseColorFactor", glm::vec4(0.08f, 0.08f, 0.08f, 1.0f));
@@ -817,7 +809,7 @@ void Scene::render(Shader& shader, const Camera& camera) const {
 
     // --- Headlights + Tail lights ---
     {
-        const int maxHL = 24;
+        const int maxHL = 12;
         float nightFactor = 1.0f - m_dayFactor;
         float hlIntensity = nightFactor > 0.15f ? nightFactor * 3.5f : 0.0f;
         shader.setFloat("uHeadlightIntensity", hlIntensity);
@@ -844,7 +836,7 @@ void Scene::render(Shader& shader, const Camera& camera) const {
         shader.setInt("uHeadlightCount", hlCount);
 
         // --- Tail lights (red, brighter when stopped) ---
-        const int maxTL = 24;
+        const int maxTL = 12;
         int tlCount = 0;
         if (hlIntensity > 0.01f) {
             for (const auto& c : m_cars) {
@@ -867,7 +859,7 @@ void Scene::render(Shader& shader, const Camera& camera) const {
         shader.setFloat("uTailLightIntensity", hlIntensity * 0.6f);
 
         // --- Street lamps ---
-        const int maxSL = 32;
+        const int maxSL = 16;
         int slCount = 0;
         if (nightFactor > 0.1f) {
             for (const auto& lamp : m_streetLamps) {

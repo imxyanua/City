@@ -33,23 +33,23 @@ uniform vec4      uBaseColorFactor;
 uniform sampler2D uDiffuseTex;
 uniform bool      uUseTexture;
 
-// Car headlights (max 24 = 12 cars × 2)
-#define MAX_HEADLIGHTS 24
+// Car headlights (max 12 = 6 cars × 2)
+#define MAX_HEADLIGHTS 12
 uniform int   uHeadlightCount;
 uniform vec3  uHeadlightPos[MAX_HEADLIGHTS];
 uniform vec3  uHeadlightDir[MAX_HEADLIGHTS];
 uniform vec3  uHeadlightColor;
 uniform float uHeadlightIntensity;
 
-// Tail lights (red, max 24)
-#define MAX_TAILLIGHTS 24
+// Tail lights (red, max 12)
+#define MAX_TAILLIGHTS 12
 uniform int   uTailLightCount;
 uniform vec3  uTailLightPos[MAX_TAILLIGHTS];
 uniform float uTailLightBrake[MAX_TAILLIGHTS];
 uniform float uTailLightIntensity;
 
-// Street lamps (max 32)
-#define MAX_STREETLAMPS 32
+// Street lamps (max 16)
+#define MAX_STREETLAMPS 16
 uniform int   uStreetLampCount;
 uniform vec3  uStreetLampPos[MAX_STREETLAMPS];
 uniform vec3  uStreetLampColor;
@@ -75,16 +75,15 @@ float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir)
     float currentDepth = projCoords.z;
     float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.001);
     
-    float shadow = 0.0;
+    // 4-sample PCF (rotated square) instead of 9 (3x3)
     vec2 texelSize = 1.0 / textureSize(uShadowMap, 0);
-    for(int x = -1; x <= 1; ++x) {
-        for(int y = -1; y <= 1; ++y) {
-            float pcfDepth = texture(uShadowMap, projCoords.xy + vec2(x, y) * texelSize).r; 
-            shadow += currentDepth - bias > pcfDepth  ? 1.0 : 0.0;        
-        }    
-    }
-    shadow /= 9.0;
-    return shadow * smoothstep(0.0, 0.4, uDayFactor); // Softer shadows at dawn/dusk
+    float shadow = 0.0;
+    shadow += step(currentDepth - bias, texture(uShadowMap, projCoords.xy + vec2(-0.7, -0.7) * texelSize).r) > 0.0 ? 0.0 : 1.0;
+    shadow += step(currentDepth - bias, texture(uShadowMap, projCoords.xy + vec2( 0.7, -0.7) * texelSize).r) > 0.0 ? 0.0 : 1.0;
+    shadow += step(currentDepth - bias, texture(uShadowMap, projCoords.xy + vec2(-0.7,  0.7) * texelSize).r) > 0.0 ? 0.0 : 1.0;
+    shadow += step(currentDepth - bias, texture(uShadowMap, projCoords.xy + vec2( 0.7,  0.7) * texelSize).r) > 0.0 ? 0.0 : 1.0;
+    shadow *= 0.25;
+    return shadow * smoothstep(0.0, 0.4, uDayFactor);
 }
 
 float hash2d(vec2 p)
@@ -102,14 +101,15 @@ float rainSplash(vec2 px, float t, float inten)
     vec2  fp   = fract(px / scale) - 0.5;
     float splash = 0.0;
 
-    for (int dy = -1; dy <= 1; dy++)
-    for (int dx = -1; dx <= 1; dx++)
+    // 5-sample cross pattern instead of 3x3 (9 samples)
+    vec2 offsets[5] = vec2[](vec2(0,0), vec2(-1,0), vec2(1,0), vec2(0,-1), vec2(0,1));
+    for (int i = 0; i < 5; i++)
     {
-        vec2  nb    = cell + vec2(float(dx), float(dy));
+        vec2  nb    = cell + offsets[i];
         float rnd   = hash2d(nb * 0.73 + vec2(17.3, 31.7));
         float phase = fract(t * mix(1.8, 4.0, rnd) + rnd * 6.28);
         vec2  off   = vec2(hash2d(nb + 0.1), hash2d(nb + 0.2)) - 0.5;
-        float dist  = length(fp - vec2(float(dx), float(dy)) - off * 0.5);
+        float dist  = length(fp - offsets[i] - off * 0.5);
         float ring  = 1.0 - smoothstep(0.0, 0.06, abs(dist - phase * 0.4));
         ring *= (1.0 - phase);
         ring *= step(0.4 - inten * 0.3, rnd);
@@ -124,9 +124,8 @@ vec3 calcHeadlights(vec3 fragPos, vec3 N, vec3 albedo)
     if (uHeadlightCount <= 0 || uHeadlightIntensity < 0.01) return vec3(0.0);
 
     vec3 totalLight = vec3(0.0);
-    for (int i = 0; i < MAX_HEADLIGHTS; i++)
+    for (int i = 0; i < uHeadlightCount; i++)
     {
-        if (i >= uHeadlightCount) break;
 
         vec3 toFrag = fragPos - uHeadlightPos[i];
         float dist = length(toFrag);
@@ -159,9 +158,8 @@ vec3 calcTailLights(vec3 fragPos, vec3 N, vec3 albedo)
     vec3 totalLight = vec3(0.0);
     vec3 tailColor = vec3(1.0, 0.08, 0.05); // deep red
 
-    for (int i = 0; i < MAX_TAILLIGHTS; i++)
+    for (int i = 0; i < uTailLightCount; i++)
     {
-        if (i >= uTailLightCount) break;
 
         vec3 toFrag = fragPos - uTailLightPos[i];
         float dist = length(toFrag);
@@ -181,9 +179,8 @@ vec3 calcStreetLamps(vec3 fragPos, vec3 N, vec3 albedo)
     if (uStreetLampCount <= 0 || uStreetLampIntensity < 0.01) return vec3(0.0);
 
     vec3 totalLight = vec3(0.0);
-    for (int i = 0; i < MAX_STREETLAMPS; i++)
+    for (int i = 0; i < uStreetLampCount; i++)
     {
-        if (i >= uStreetLampCount) break;
 
         vec3 toFrag = fragPos - uStreetLampPos[i];
         float dist = length(toFrag);
