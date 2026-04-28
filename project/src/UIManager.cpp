@@ -61,6 +61,7 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             ImGui::Separator();
             ImGui::Text(u8"--- Mưa & Ướt ---");
             if (ImGui::SliderFloat(u8"Cường độ mưa", &opts.rainIntensity, 0.0f, 1.0f)) scene.setWetness(opts.rainIntensity);
+            ImGui::SliderFloat(u8"Độ cao tầng mây", &opts.cloudHeight, 40.0f, 140.0f, "%.1f");
             ImGui::SliderFloat2(u8"Hướng gió", &opts.windDir.x, -1.0f, 1.0f);
             opts.windDir = glm::normalize(opts.windDir + glm::vec2(1e-5f));
             ImGui::EndTabItem();
@@ -103,6 +104,10 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             ImGui::Text(u8"--- Khử răng cưa & Ống kính ---");
             ImGui::SliderFloat(u8"FXAA (Anti-aliasing)", &opts.fxaaIntensity, 0.0f, 1.0f);
             ImGui::SliderFloat(u8"Chromatic Aberration", &opts.chromaticAberration, 0.0f, 0.05f, "%.3f");
+            ImGui::Separator();
+            ImGui::Text(u8"--- Chiều sâu & Phản chiếu ---");
+            ImGui::SliderFloat(u8"SSAO (Ambient Occlusion)", &opts.ssaoIntensity, 0.0f, 2.0f);
+            ImGui::SliderFloat(u8"SSR (Phản chiếu mưa)", &opts.ssrIntensity, 0.0f, 1.5f);
             ImGui::EndTabItem();
         }
 

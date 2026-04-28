@@ -1,6 +1,7 @@
 #version 330 core
 in vec3 vWorldPos;
 in vec3 vNormal;
+in vec3 vViewNormal;
 in vec2 vTexCoord;
 in vec4 vFragPosLightSpace;
 
@@ -55,7 +56,8 @@ uniform vec3  uStreetLampPos[MAX_STREETLAMPS];
 uniform vec3  uStreetLampColor;
 uniform float uStreetLampIntensity;
 
-out vec4 FragColor;
+layout(location = 0) out vec4 FragColor;
+layout(location = 1) out vec4 FragNormal;
 
 // --------------- ACES Filmic ---------------
 vec3 acesToneMap(vec3 x)
@@ -442,4 +444,5 @@ void main()
     color  = acesToneMap(color);
 
     FragColor = vec4(color, uBaseColorFactor.a);
+    FragNormal = vec4(normalize(vViewNormal) * 0.5 + 0.5, 1.0);
 }

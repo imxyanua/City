@@ -17,6 +17,7 @@ struct AppOptions {
     
     float rainIntensity = 0.0f;
     glm::vec2 windDir = glm::normalize(glm::vec2(-1.0f, -0.2f));
+    float cloudHeight = 90.0f;
     
     float bloomThreshold = 1.2f;
     float bloomIntensity = 0.4f;
@@ -25,6 +26,8 @@ struct AppOptions {
     float vignetteIntensity = 0.55f;
     float fxaaIntensity = 1.0f;
     float chromaticAberration = 0.012f;
+    float ssaoIntensity = 1.0f;
+    float ssrIntensity = 0.6f;
 
     int cameraMode = 0; // 0: Free, 1: Follow Car, 2: CCTV, 3: Drive, 4: Cinematic
 
@@ -39,6 +42,7 @@ inline void saveConfig(const AppOptions& opts, const std::string& path) {
     nlohmann::json j;
     j["timeOfDayHour"] = opts.timeOfDayHour;
     j["rainIntensity"] = opts.rainIntensity;
+    j["cloudHeight"] = opts.cloudHeight;
     j["bloomThreshold"] = opts.bloomThreshold;
     j["bloomIntensity"] = opts.bloomIntensity;
     j["godRayIntensity"] = opts.godRayIntensity;
@@ -46,6 +50,8 @@ inline void saveConfig(const AppOptions& opts, const std::string& path) {
     j["vignetteIntensity"] = opts.vignetteIntensity;
     j["fxaaIntensity"] = opts.fxaaIntensity;
     j["chromaticAberration"] = opts.chromaticAberration;
+    j["ssaoIntensity"] = opts.ssaoIntensity;
+    j["ssrIntensity"] = opts.ssrIntensity;
     j["cameraMode"] = opts.cameraMode;
 
     std::ofstream o(path);
@@ -62,6 +68,7 @@ inline void loadConfig(AppOptions& opts, const std::string& path) {
         i >> j;
         if (j.contains("timeOfDayHour")) opts.timeOfDayHour = j["timeOfDayHour"];
         if (j.contains("rainIntensity")) opts.rainIntensity = j["rainIntensity"];
+        if (j.contains("cloudHeight")) opts.cloudHeight = j["cloudHeight"];
         if (j.contains("bloomThreshold")) opts.bloomThreshold = j["bloomThreshold"];
         if (j.contains("bloomIntensity")) opts.bloomIntensity = j["bloomIntensity"];
         if (j.contains("godRayIntensity")) opts.godRayIntensity = j["godRayIntensity"];
@@ -69,6 +76,8 @@ inline void loadConfig(AppOptions& opts, const std::string& path) {
         if (j.contains("vignetteIntensity")) opts.vignetteIntensity = j["vignetteIntensity"];
         if (j.contains("fxaaIntensity")) opts.fxaaIntensity = j["fxaaIntensity"];
         if (j.contains("chromaticAberration")) opts.chromaticAberration = j["chromaticAberration"];
+        if (j.contains("ssaoIntensity")) opts.ssaoIntensity = j["ssaoIntensity"];
+        if (j.contains("ssrIntensity")) opts.ssrIntensity = j["ssrIntensity"];
         if (j.contains("cameraMode")) opts.cameraMode = j["cameraMode"];
     } catch (std::exception& e) {
         std::cerr << "Failed to parse config: " << e.what() << std::endl;

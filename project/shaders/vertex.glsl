@@ -11,6 +11,7 @@ uniform mat4 uLightSpaceMatrix;
 
 out vec3 vWorldPos;
 out vec3 vNormal;
+out vec3 vViewNormal;
 out vec2 vTexCoord;
 out vec4 vFragPosLightSpace;
 
@@ -19,6 +20,7 @@ void main()
     vec4 worldPos = uModel * vec4(aPos, 1.0);
     vWorldPos = worldPos.xyz;
     vNormal = normalize(uNormalMatrix * aNormal);
+    vViewNormal = normalize(mat3(uView * uModel) * aNormal);
     vTexCoord = aTexCoord;
     vFragPosLightSpace = uLightSpaceMatrix * worldPos;
     gl_Position = uProjection * uView * worldPos;

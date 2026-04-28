@@ -6,7 +6,7 @@ uniform float uRainIntensity;
 
 void main()
 {
-    // Light blueish-white rain color
-    vec3 color = vec3(0.8, 0.85, 0.95);
-    FragColor = vec4(color, vAlpha * uRainIntensity * 0.5);
+    vec3 color = vec3(0.78, 0.86, 0.95);
+    float alpha = vAlpha * uRainIntensity;
+    FragColor = vec4(color, alpha);
 }

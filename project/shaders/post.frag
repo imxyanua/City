@@ -29,6 +29,13 @@ uniform vec2  uWindDir;
 uniform float uFxaaIntensity;
 uniform float uChromaticAberration;
 
+// SSAO + SSR
+uniform sampler2D uSSAOTex;
+uniform sampler2D uNormalTex;
+uniform mat4  uProjection;
+uniform float uSSAOIntensity;
+uniform float uSSRIntensity;
+
 out vec4 FragColor;
 
 // ---------- Helpers ----------
@@ -197,6 +204,66 @@ void main()
     if (skyMask > 0.5) {
         vec3 skyCol = proceduralSky(rayW, normalize(uSunDir), uDayFactor);
         sceneCol = mix(sceneCol, skyCol, skyMask);
+    }
+
+    // ---- SSAO composite ----
+    if (uSSAOIntensity > 0.01 && skyMask < 0.5) {
+        float ao = texture(uSSAOTex, vUV).r;
+        ao = mix(1.0, ao, uSSAOIntensity);
+        sceneCol *= ao;
+    }
+
+    // ---- SSR (Screen-Space Reflections) — wet ground only ----
+    if (uSSRIntensity > 0.01 && uRainIntensity > 0.1 && skyMask < 0.5) {
+        vec3 viewNormal = normalize(texture(uNormalTex, vUV).rgb * 2.0 - 1.0);
+        // Only reflect on roughly upward-facing surfaces (ground/road)
+        if (viewNormal.y < -0.5) { // In view space, ground normals point -Y (toward camera top)
+            // Reconstruct view-space position
+            vec2 ndc = vUV * 2.0 - 1.0;
+            vec4 clipPos = vec4(ndc, rawD * 2.0 - 1.0, 1.0);
+            vec4 viewPos4 = uInvProj * clipPos;
+            vec3 viewPos = viewPos4.xyz / viewPos4.w;
+
+            vec3 viewDir = normalize(viewPos);
+            vec3 reflDir = reflect(viewDir, viewNormal);
+
+            // Ray-march in screen space
+            vec3 ssrColor = vec3(0.0);
+            bool hit = false;
+            float stepSize = 0.06;
+            vec3 marchPos = viewPos;
+
+            for (int i = 0; i < 16; i++) {
+                marchPos += reflDir * stepSize;
+                stepSize *= 1.15; // Accelerate steps
+
+                // Project to screen
+                vec4 projPos = uProjection * vec4(marchPos, 1.0);
+                projPos.xyz /= projPos.w;
+                vec2 sampleUV = projPos.xy * 0.5 + 0.5;
+
+                if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0) break;
+
+                float sampledDepth = texture(uDepth, sampleUV).r;
+                vec4 sampledClip = vec4(sampleUV * 2.0 - 1.0, sampledDepth * 2.0 - 1.0, 1.0);
+                vec4 sampledView4 = uInvProj * sampledClip;
+                float sampledViewZ = sampledView4.z / sampledView4.w;
+
+                if (marchPos.z < sampledViewZ && marchPos.z > sampledViewZ - 0.5) {
+                    ssrColor = texture(uScene, sampleUV).rgb;
+                    // Fade at screen edges
+                    float edgeFade = 1.0 - smoothstep(0.0, 0.1, max(max(abs(sampleUV.x - 0.5) - 0.4, 0.0), max(abs(sampleUV.y - 0.5) - 0.4, 0.0)) * 10.0);
+                    ssrColor *= edgeFade;
+                    hit = true;
+                    break;
+                }
+            }
+
+            if (hit) {
+                float reflStrength = uSSRIntensity * uRainIntensity * 0.5;
+                sceneCol = mix(sceneCol, ssrColor, reflStrength);
+            }
+        }
     }
 
     // ---- Bloom composite ----

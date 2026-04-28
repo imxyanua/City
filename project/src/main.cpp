@@ -356,7 +356,7 @@ int main(int argc, char* argv[])
     loadConfig(opts, (exeDir / "config.json").string());
     UIManager uiManager;
     RainSystem rainSystem;
-    rainSystem.init(50000);
+    rainSystem.init(100000);
 
 
     applyTimeOfDayHour(scene, opts.timeOfDayHour, opts.clearCol);
@@ -382,6 +382,7 @@ int main(int argc, char* argv[])
         g_lastFrame = now;
 
         scene.update(g_deltaTime);
+        rainSystem.update(g_deltaTime, camera, opts.rainIntensity, opts.windDir, opts.cloudHeight);
 
 
         ImGui_ImplOpenGL3_NewFrame();
@@ -532,10 +533,20 @@ int main(int argc, char* argv[])
         
         scene.render(shader, camera);
 
-        rainSystem.render(rainShader, camera, opts.rainIntensity, opts.windDir, static_cast<float>(now), fbW, fbH);
+        // Switch to single draw buffer for transparent passes (rain, particles)
+        // They don't output normals, so avoid writing garbage to normal buffer
+        GLenum singleBuf[] = { GL_COLOR_ATTACHMENT0 };
+        glDrawBuffers(1, singleBuf);
+
+        rainSystem.render(rainShader, camera, opts.rainIntensity, opts.windDir, fbW, fbH);
         
         scene.renderParticles(particleShader, camera);
 
+        // Restore MRT for post-processing readback
+        GLenum dualBuf[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+        glDrawBuffers(2, dualBuf);
+
+        postProcessor.renderSSAO(camera);
 
         postProcessor.renderBloom(opts.bloomThreshold);
         postProcessor.renderPost(camera, scene, opts, static_cast<float>(now));
