@@ -2,10 +2,15 @@
 
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
+#include <array>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <string>
 
 struct AppOptions {
+    static constexpr int kUiFavoriteCount = 9;
+
     bool showMenu = false;
     bool wireframe = false;
     bool cullBack = true;
@@ -36,6 +41,13 @@ struct AppOptions {
     int gridCols = 6;
     float gridSpaceX = 95.0f;
     float gridSpaceZ = 110.0f;
+
+    bool uiShowFavorites = true;
+    bool uiCompact = false;
+    bool uiShowHotkeys = true;
+    std::array<bool, kUiFavoriteCount> uiFavorites = {true, true, true, false, false, true, false, false, false};
+    int uiSection = 0;
+    std::string uiSearch;
 };
 
 inline void saveConfig(const AppOptions& opts, const std::string& path) {
@@ -53,6 +65,12 @@ inline void saveConfig(const AppOptions& opts, const std::string& path) {
     j["ssaoIntensity"] = opts.ssaoIntensity;
     j["ssrIntensity"] = opts.ssrIntensity;
     j["cameraMode"] = opts.cameraMode;
+    j["uiShowFavorites"] = opts.uiShowFavorites;
+    j["uiCompact"] = opts.uiCompact;
+    j["uiShowHotkeys"] = opts.uiShowHotkeys;
+    j["uiFavorites"] = opts.uiFavorites;
+    j["uiSection"] = opts.uiSection;
+    j["uiSearch"] = opts.uiSearch;
 
     std::ofstream o(path);
     if (o.is_open()) {
@@ -79,6 +97,23 @@ inline void loadConfig(AppOptions& opts, const std::string& path) {
         if (j.contains("ssaoIntensity")) opts.ssaoIntensity = j["ssaoIntensity"];
         if (j.contains("ssrIntensity")) opts.ssrIntensity = j["ssrIntensity"];
         if (j.contains("cameraMode")) opts.cameraMode = j["cameraMode"];
+        if (j.contains("uiShowFavorites")) opts.uiShowFavorites = j["uiShowFavorites"];
+        if (j.contains("uiCompact")) opts.uiCompact = j["uiCompact"];
+        if (j.contains("uiShowHotkeys")) opts.uiShowHotkeys = j["uiShowHotkeys"];
+        if (j.contains("uiFavorites") && j["uiFavorites"].is_array()) {
+            const auto& arr = j["uiFavorites"];
+            const int count = std::min(static_cast<int>(arr.size()), AppOptions::kUiFavoriteCount);
+            for (int i = 0; i < count; ++i) {
+                opts.uiFavorites[i] = arr[i].get<bool>();
+            }
+        }
+        if (j.contains("uiSection")) {
+            int s = j["uiSection"].get<int>();
+            if (s < 0) s = 0;
+            if (s > 3) s = 3;
+            opts.uiSection = s;
+        }
+        if (j.contains("uiSearch")) opts.uiSearch = j["uiSearch"].get<std::string>();
     } catch (std::exception& e) {
         std::cerr << "Failed to parse config: " << e.what() << std::endl;
     }
