@@ -251,6 +251,46 @@ void Scene::buildNeonSignMesh() {
     m_neonSignMesh.upload(p,n,uv,idx);
 }
 
+void Scene::buildStreetPropMeshes() {
+    // Trash can
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addCylinder(p,n,uv,idx, glm::vec3(0, 0, 0), 0.18f, 0.55f, 10);
+        addCylinder(p,n,uv,idx, glm::vec3(0, 0.55f, 0), 0.2f, 0.05f, 10);
+        addBox(p,n,uv,idx, glm::vec3(0, 0.62f, 0.08f), glm::vec3(0.06f, 0.015f, 0.02f));
+        m_propTrashCan.upload(p,n,uv,idx);
+    }
+    // Bollard
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addCylinder(p,n,uv,idx, glm::vec3(0, 0, 0), 0.09f, 0.7f, 10);
+        addCylinder(p,n,uv,idx, glm::vec3(0, 0.7f, 0), 0.11f, 0.05f, 10);
+        m_propBollard.upload(p,n,uv,idx);
+    }
+    // Barrier
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addBox(p,n,uv,idx, glm::vec3(0, 0.28f, 0), glm::vec3(0.65f, 0.28f, 0.16f));
+        addBox(p,n,uv,idx, glm::vec3(-0.4f, 0.05f, 0), glm::vec3(0.08f, 0.05f, 0.18f));
+        addBox(p,n,uv,idx, glm::vec3(0.4f, 0.05f, 0), glm::vec3(0.08f, 0.05f, 0.18f));
+        m_propBarrier.upload(p,n,uv,idx);
+    }
+    // Utility box
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addBox(p,n,uv,idx, glm::vec3(0, 0.38f, 0), glm::vec3(0.25f, 0.38f, 0.18f));
+        addBox(p,n,uv,idx, glm::vec3(0.18f, 0.38f, 0.18f), glm::vec3(0.03f, 0.1f, 0.02f));
+        m_propUtilityBox.upload(p,n,uv,idx);
+    }
+    // Cone
+    {
+        std::vector<float> p,n,uv; std::vector<unsigned int> idx;
+        addCone(p,n,uv,idx, glm::vec3(0, 0, 0), 0.18f, 0.5f, 14);
+        addCylinder(p,n,uv,idx, glm::vec3(0, 0, 0), 0.22f, 0.05f, 14);
+        m_propCone.upload(p,n,uv,idx);
+    }
+}
+
 // ─── init ────────────────────────────────────────────────────────
 void Scene::initTrafficAndPedestrians() {
     if (m_carModels.empty()) return;
@@ -260,6 +300,7 @@ void Scene::initTrafficAndPedestrians() {
     buildPedestrianMeshes();
     buildTrafficLightMesh();
     buildStreetLampMesh();
+    buildStreetPropMeshes();
     m_splashSystem.init();
 
     std::random_device rd;
@@ -268,6 +309,10 @@ void Scene::initTrafficAndPedestrians() {
     std::uniform_int_distribution<> disBinary(0, 1);
     std::uniform_int_distribution<> disWalkCycle(0, 99);
     std::uniform_real_distribution<float> disPedSpeed(0.8f, 1.7f);
+    std::uniform_real_distribution<float> disChance(0.0f, 1.0f);
+    std::uniform_real_distribution<float> disJitter(-1.2f, 1.2f);
+    std::uniform_real_distribution<float> disScale(0.85f, 1.15f);
+    std::uniform_real_distribution<float> disRot(0.0f, 2.0f * PI);
 
     // Place traffic lights at the 4 corners of the main intersection (0,0)
     float offsets[] = { -8.0f, 8.0f };
@@ -383,6 +428,34 @@ void Scene::initTrafficAndPedestrians() {
     m_neonSigns.push_back({{ -10.0f, 3.0f, -15.0f }, glm::vec3(1.0f), glm::vec3(1.0f, 0.2f, 0.8f), 0.5f}); // Pink
     m_neonSigns.push_back({{  10.0f, 4.0f, -25.0f }, glm::vec3(1.2f), glm::vec3(0.2f, 0.8f, 1.0f), 0.3f}); // Cyan
     m_neonSigns.push_back({{ -12.0f, 5.0f,  20.0f }, glm::vec3(0.8f), glm::vec3(0.8f, 1.0f, 0.2f), 0.8f}); // Yellow
+
+    // --- Street props (small objects) ---
+    m_streetProps.clear();
+    auto addProp = [&](glm::vec3 pos, int type) {
+        StreetProp p;
+        p.pos = pos;
+        p.type = type;
+        p.rotY = disRot(gen);
+        p.scale = glm::vec3(disScale(gen));
+        m_streetProps.push_back(p);
+    };
+
+    const float sideA = -10.5f;
+    const float sideB =  10.5f;
+    for (float z = -120.0f; z <= 120.0f; z += 12.0f) {
+        if (disChance(gen) < 0.5f) addProp(glm::vec3(sideA + disJitter(gen), 0.0f, z + disJitter(gen)), rand() % 5);
+        if (disChance(gen) < 0.5f) addProp(glm::vec3(sideB + disJitter(gen), 0.0f, z + disJitter(gen)), rand() % 5);
+    }
+    for (float x = -120.0f; x <= 120.0f; x += 12.0f) {
+        if (disChance(gen) < 0.4f) addProp(glm::vec3(x + disJitter(gen), 0.0f, sideA + disJitter(gen)), rand() % 5);
+        if (disChance(gen) < 0.4f) addProp(glm::vec3(x + disJitter(gen), 0.0f, sideB + disJitter(gen)), rand() % 5);
+    }
+
+    for (int i = 0; i < 8; ++i) {
+        float rx = ((rand() % 100) / 100.0f - 0.5f) * 10.0f;
+        float rz = ((rand() % 100) / 100.0f - 0.5f) * 10.0f;
+        addProp(glm::vec3(rx, 0.0f, rz), 4);
+    }
 }
 
 // ─── update ──────────────────────────────────────────────────────
@@ -885,6 +958,7 @@ void Scene::render(Shader& shader, const Camera& camera) const {
         drawStreetLamps(shader, world, camera.position());
         drawPigeons(shader, world, camera.position());
         drawNeonSigns(shader, world, camera.position());
+        drawStreetProps(shader, world, camera.position());
     }
 }
 
@@ -967,5 +1041,50 @@ void Scene::drawNeonSigns(Shader& shader, const glm::mat4& world, const glm::vec
         shader.setMat4("uModel", base);
         shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
         m_neonSignMesh.draw();
+    }
+}
+
+void Scene::drawStreetProps(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const {
+    shader.setBool("uUseTexture", false);
+    for (const auto& prop : m_streetProps) {
+        glm::vec3 globalPos = glm::vec3(world * glm::vec4(prop.pos, 1.0f));
+        if (glm::distance(camPos, globalPos) > 140.0f) continue;
+
+        glm::mat4 base = glm::translate(world, prop.pos);
+        base = glm::rotate(base, prop.rotY, glm::vec3(0, 1, 0));
+        base = glm::scale(base, prop.scale);
+
+        switch (prop.type) {
+        case 0: // Trash can
+            shader.setVec4("uBaseColorFactor", glm::vec4(0.18f, 0.2f, 0.22f, 1.0f));
+            shader.setMat4("uModel", base);
+            shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
+            m_propTrashCan.draw();
+            break;
+        case 1: // Bollard
+            shader.setVec4("uBaseColorFactor", glm::vec4(0.7f, 0.7f, 0.2f, 1.0f));
+            shader.setMat4("uModel", base);
+            shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
+            m_propBollard.draw();
+            break;
+        case 2: // Barrier
+            shader.setVec4("uBaseColorFactor", glm::vec4(0.85f, 0.45f, 0.1f, 1.0f));
+            shader.setMat4("uModel", base);
+            shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
+            m_propBarrier.draw();
+            break;
+        case 3: // Utility box
+            shader.setVec4("uBaseColorFactor", glm::vec4(0.25f, 0.45f, 0.25f, 1.0f));
+            shader.setMat4("uModel", base);
+            shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
+            m_propUtilityBox.draw();
+            break;
+        default: // Cone
+            shader.setVec4("uBaseColorFactor", glm::vec4(0.95f, 0.4f, 0.05f, 1.0f));
+            shader.setMat4("uModel", base);
+            shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
+            m_propCone.draw();
+            break;
+        }
     }
 }

@@ -68,6 +68,13 @@ struct StreetLamp {
     glm::vec3 lightWorldPos() const { return pos + glm::vec3(0, lightHeight, 0); }
 };
 
+struct StreetProp {
+    glm::vec3 pos{0.0f};
+    glm::vec3 scale{1.0f};
+    float rotY = 0.0f;
+    int type = 0;
+};
+
 class Scene {
 public:
     bool loadCityModel(const std::string& glbPath);
@@ -140,11 +147,13 @@ private:
     void drawStreetLamps(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void drawPigeons(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void drawNeonSigns(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
+    void drawStreetProps(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void buildPedestrianMeshes();
     void buildTrafficLightMesh();
     void buildStreetLampMesh();
     void buildPigeonMesh();
     void buildNeonSignMesh();
+    void buildStreetPropMeshes();
 
     Model m_cityModel;
     std::vector<glm::mat4> m_instanceTransforms;
@@ -177,6 +186,13 @@ private:
 
     Mesh m_neonSignMesh;
     std::vector<NeonSign> m_neonSigns;
+
+    Mesh m_propTrashCan;
+    Mesh m_propBollard;
+    Mesh m_propBarrier;
+    Mesh m_propUtilityBox;
+    Mesh m_propCone;
+    std::vector<StreetProp> m_streetProps;
 
     float m_aspect = 16.0f / 9.0f;
     float m_carScale = 100.0f;
