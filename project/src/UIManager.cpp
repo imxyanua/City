@@ -456,11 +456,11 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             ImGui::Separator();
 
             if (favorites[FavTime]) {
-                ImGui::Checkbox(u8"Đồng bộ thời gian thực", &opts.syncTimeOfDay);
+                ImGui::Checkbox(u8"Đồng bộ thời gian thực##fav_time_sync", &opts.syncTimeOfDay);
                 if (opts.syncTimeOfDay) {
                     ImGui::TextDisabled(u8"Giờ (0–24): %.2f", opts.timeOfDayHour);
                 } else {
-                    if (ImGui::SliderFloat(u8"Giờ (0–24)", &opts.timeOfDayHour, 0.0f, 24.0f, "%.2f")) {
+                    if (ImGui::SliderFloat(u8"Giờ (0–24)##fav_time", &opts.timeOfDayHour, 0.0f, 24.0f, "%.2f")) {
                         (void)opts.timeOfDayHour;
                     }
                 }
@@ -472,47 +472,47 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             }
 
             if (favorites[FavRain]) {
-                if (ImGui::SliderFloat(u8"Cường độ mưa", &opts.rainIntensity, 0.0f, 1.0f)) scene.setWetness(opts.rainIntensity);
+                if (ImGui::SliderFloat(u8"Cường độ mưa##fav_rain", &opts.rainIntensity, 0.0f, 1.0f)) scene.setWetness(opts.rainIntensity);
                 ImGui::SameLine();
                 ImGui::Checkbox(u8"Ghim##fav_rain", &favorites[FavRain]);
             }
             if (favorites[FavCloud]) {
-                ImGui::SliderFloat(u8"Độ cao tầng mây", &opts.cloudHeight, 40.0f, 140.0f, "%.1f");
+                ImGui::SliderFloat(u8"Độ cao tầng mây##fav_cloud", &opts.cloudHeight, 40.0f, 140.0f, "%.1f");
                 ImGui::SameLine();
                 ImGui::Checkbox(u8"Ghim##fav_cloud", &favorites[FavCloud]);
             }
             if (favorites[FavWind]) {
-                ImGui::SliderFloat2(u8"Hướng gió", &opts.windDir.x, -1.0f, 1.0f);
+                ImGui::SliderFloat2(u8"Hướng gió##fav_wind", &opts.windDir.x, -1.0f, 1.0f);
                 opts.windDir = glm::normalize(opts.windDir + glm::vec2(1e-5f));
                 ImGui::SameLine();
                 ImGui::Checkbox(u8"Ghim##fav_wind", &favorites[FavWind]);
             }
             if (favorites[FavFog]) {
                 float fogD = scene.fogDensity();
-                if (ImGui::SliderFloat(u8"Mật độ sương", &fogD, 0.0f, 1.2f)) scene.setFogDensity(fogD);
+                if (ImGui::SliderFloat(u8"Mật độ sương##fav_fog", &fogD, 0.0f, 1.2f)) scene.setFogDensity(fogD);
                 ImGui::SameLine();
                 ImGui::Checkbox(u8"Ghim##fav_fog", &favorites[FavFog]);
             }
             if (favorites[FavExposure]) {
                 float exp = scene.exposure();
-                if (ImGui::SliderFloat(u8"Phơi sáng", &exp, 0.2f, 3.5f)) scene.setExposure(exp);
+                if (ImGui::SliderFloat(u8"Phơi sáng##fav_exp", &exp, 0.2f, 3.5f)) scene.setExposure(exp);
                 ImGui::SameLine();
                 ImGui::Checkbox(u8"Ghim##fav_exp", &favorites[FavExposure]);
             }
             if (favorites[FavBloom]) {
-                ImGui::SliderFloat(u8"Bloom Intensity", &opts.bloomIntensity, 0.0f, 2.0f);
+                ImGui::SliderFloat(u8"Bloom Intensity##fav_bloom", &opts.bloomIntensity, 0.0f, 2.0f);
                 ImGui::SameLine();
                 ImGui::Checkbox(u8"Ghim##fav_bloom", &favorites[FavBloom]);
             }
             if (favorites[FavFov]) {
                 float fov = camera.fovDegrees();
-                if (ImGui::SliderFloat(u8"FOV", &fov, 20.0f, 90.0f)) camera.setFovDegrees(fov);
+                if (ImGui::SliderFloat(u8"FOV##fav_fov", &fov, 20.0f, 90.0f)) camera.setFovDegrees(fov);
                 ImGui::SameLine();
                 ImGui::Checkbox(u8"Ghim##fav_fov", &favorites[FavFov]);
             }
             if (favorites[FavSpeed]) {
                 float spd = camera.moveSpeed();
-                if (ImGui::SliderFloat(u8"Tốc độ camera", &spd, 2.0f, 80.0f)) camera.setMoveSpeed(spd);
+                if (ImGui::SliderFloat(u8"Tốc độ camera##fav_speed", &spd, 2.0f, 80.0f)) camera.setMoveSpeed(spd);
                 ImGui::SameLine();
                 ImGui::Checkbox(u8"Ghim##fav_speed", &favorites[FavSpeed]);
             }
