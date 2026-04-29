@@ -313,6 +313,7 @@ void Scene::initTrafficAndPedestrians() {
     std::uniform_real_distribution<float> disJitter(-1.2f, 1.2f);
     std::uniform_real_distribution<float> disScale(0.85f, 1.15f);
     std::uniform_real_distribution<float> disRot(0.0f, 2.0f * PI);
+    std::uniform_int_distribution<int> disSignColor(0, 5);
 
     // Place traffic lights at the 4 corners of the main intersection (0,0)
     float offsets[] = { -8.0f, 8.0f };
@@ -425,9 +426,92 @@ void Scene::initTrafficAndPedestrians() {
     buildNeonSignMesh();
     m_neonSigns.clear();
     // Add neon signs on some building walls
-    m_neonSigns.push_back({{ -10.0f, 3.0f, -15.0f }, glm::vec3(1.0f), glm::vec3(1.0f, 0.2f, 0.8f), 0.5f}); // Pink
-    m_neonSigns.push_back({{  10.0f, 4.0f, -25.0f }, glm::vec3(1.2f), glm::vec3(0.2f, 0.8f, 1.0f), 0.3f}); // Cyan
-    m_neonSigns.push_back({{ -12.0f, 5.0f,  20.0f }, glm::vec3(0.8f), glm::vec3(0.8f, 1.0f, 0.2f), 0.8f}); // Yellow
+    m_neonSigns.push_back({{ -14.8f, 3.2f, -18.0f }, glm::vec3(1.0f, 0.9f, 0.12f), glm::vec3(1.0f, 0.2f, 0.8f), 2.6f, 0.0f, 0.2f, 0.34f}); // Pink
+    m_neonSigns.push_back({{  14.8f, 4.4f, -30.0f }, glm::vec3(1.25f, 1.0f, 0.12f), glm::vec3(0.2f, 0.8f, 1.0f), 2.3f, 0.0f, 1.1f, 0.30f}); // Cyan
+    m_neonSigns.push_back({{ -14.8f, 6.8f,  22.0f }, glm::vec3(0.9f, 0.85f, 0.12f), glm::vec3(0.8f, 1.0f, 0.2f), 2.9f, 0.0f, 2.4f, 0.38f}); // Yellow
+
+    auto pickSignColor = [&]() {
+        switch (disSignColor(gen)) {
+        case 0: return glm::vec3(1.1f, 0.2f, 0.85f);
+        case 1: return glm::vec3(0.25f, 0.9f, 1.1f);
+        case 2: return glm::vec3(0.95f, 0.95f, 0.25f);
+        case 3: return glm::vec3(0.35f, 1.05f, 0.45f);
+        case 4: return glm::vec3(1.05f, 0.45f, 0.2f);
+        default: return glm::vec3(0.75f, 0.55f, 1.1f);
+        }
+    };
+
+    const float signOffset = 14.8f;
+    const float signStep = 16.0f;
+    auto bandY = [](int slot) {
+        switch (slot % 4) {
+        case 0: return 3.6f;
+        case 1: return 5.4f;
+        case 2: return 7.2f;
+        default: return 8.9f;
+        }
+    };
+
+    // Bien hieu doc theo truc Z (mat tien toa nha hai ben duong chinh)
+    int slotZ = 0;
+    for (float z = -120.0f; z <= 120.0f; z += signStep, ++slotZ) {
+        if (std::abs(z) < 16.0f) continue;
+        if ((slotZ % 2) == 0) {
+            float w = 1.2f + 0.2f * static_cast<float>(slotZ % 3);
+            float h = 0.75f + 0.1f * static_cast<float>((slotZ + 1) % 3);
+            float speed = 2.2f + 0.2f * static_cast<float>(slotZ % 5);
+            float phase = static_cast<float>(slotZ) * 0.8f;
+            float depth = 0.30f + 0.05f * static_cast<float>((slotZ + 2) % 3);
+            m_neonSigns.push_back({
+                { signOffset, bandY(slotZ), z },
+                glm::vec3(w, h, 0.12f),
+                pickSignColor(),
+                speed,
+                PI * 0.5f,
+                phase,
+                depth
+            });
+            m_neonSigns.push_back({
+                { -signOffset, bandY(slotZ + 1), z },
+                glm::vec3(w * 0.95f, h * 1.05f, 0.12f),
+                pickSignColor(),
+                speed + 0.25f,
+                -PI * 0.5f,
+                phase + 1.1f,
+                depth
+            });
+        }
+    }
+    // Bien hieu doc theo truc X
+    int slotX = 0;
+    for (float x = -120.0f; x <= 120.0f; x += signStep, ++slotX) {
+        if (std::abs(x) < 16.0f) continue;
+        if ((slotX % 2) == 1) {
+            float w = 1.0f + 0.25f * static_cast<float>(slotX % 3);
+            float h = 0.72f + 0.12f * static_cast<float>((slotX + 2) % 3);
+            float speed = 2.3f + 0.18f * static_cast<float>(slotX % 5);
+            float phase = static_cast<float>(slotX) * 0.7f;
+            float depth = 0.28f + 0.04f * static_cast<float>((slotX + 1) % 3);
+            m_neonSigns.push_back({
+                { x, bandY(slotX), signOffset },
+                glm::vec3(w, h, 0.12f),
+                pickSignColor(),
+                speed,
+                0.0f,
+                phase,
+                depth
+            });
+            m_neonSigns.push_back({
+                { x, bandY(slotX + 2), -signOffset },
+                glm::vec3(w * 0.95f, h * 0.95f, 0.12f),
+                pickSignColor(),
+                speed + 0.2f,
+                PI,
+                phase + 0.9f,
+                depth
+            });
+        }
+    }
 
     // --- Street props (small objects) ---
     m_streetProps.clear();
@@ -460,6 +544,11 @@ void Scene::initTrafficAndPedestrians() {
 
 // ─── update ──────────────────────────────────────────────────────
 void Scene::update(float dt) {
+    m_timeSec += dt;
+    if (m_timeSec > 100000.0f) {
+        m_timeSec = 0.0f;
+    }
+
     // Update traffic light state machines
     for (auto& tl : m_trafficLights) {
         tl.timer += dt;
@@ -1026,20 +1115,33 @@ void Scene::drawNeonSigns(Shader& shader, const glm::mat4& world, const glm::vec
         if (glm::distance(camPos, globalPos) > 150.0f) continue;
         
         glm::mat4 base = glm::translate(world, ns.pos);
-        base = glm::scale(base, ns.scale);
+        base = glm::rotate(base, ns.rotY, glm::vec3(0, 1, 0));
+
+        // Quang halo ben ngoai de bien hieu neon nom mem va day hon
+        float haloWave = 0.5f + 0.5f * std::sin(m_timeSec * ns.flickerSpeed + ns.pulsePhase + 1.35f);
+        float haloPulse = (1.0f - ns.pulseDepth) + ns.pulseDepth * (0.45f + 0.55f * haloWave);
+        glm::mat4 halo = glm::scale(base, ns.scale * (1.12f + 0.05f * haloPulse));
+        float haloNight = 1.0f - m_dayFactor;
+        glm::vec3 haloCol = ns.color * (0.05f + haloNight * (0.55f + 0.55f * haloPulse));
+        shader.setVec4("uBaseColorFactor", glm::vec4(haloCol, 1.0f));
+        shader.setMat4("uModel", halo);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(halo))));
+        m_neonSignMesh.draw();
+
+        glm::mat4 sign = glm::scale(base, ns.scale);
         
-        // Flicker logic using global dayFactor or random
-        float flicker = sin(globalPos.x * 5.0f + m_dayFactor * 100.0f * ns.flickerSpeed);
-        flicker = (flicker > 0.8f) ? 0.2f : 1.0f; // occasional off
-        
-        // Emissive in dark
+        // Neon pulse liên tục, không tắt hẳn trừ khi ban ngày
+        float wave = 0.5f + 0.5f * std::sin(m_timeSec * ns.flickerSpeed + ns.pulsePhase);
+        float pulse = (1.0f - ns.pulseDepth) + ns.pulseDepth * (0.35f + 0.65f * wave);
+
         float nightFactor = 1.0f - m_dayFactor;
-        float emissive = nightFactor > 0.1f ? nightFactor * 8.0f * flicker : 0.0f;
-        glm::vec3 col = ns.color * (0.2f + emissive);
+        float emissive = nightFactor > 0.04f ? nightFactor * (2.2f + 6.8f * pulse) : 0.0f;
+        float halo = 0.12f + 0.10f * pulse;
+        glm::vec3 col = ns.color * (halo + emissive);
         
         shader.setVec4("uBaseColorFactor", glm::vec4(col, 1.0f));
-        shader.setMat4("uModel", base);
-        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(base))));
+        shader.setMat4("uModel", sign);
+        shader.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(sign))));
         m_neonSignMesh.draw();
     }
 }

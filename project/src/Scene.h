@@ -45,6 +45,9 @@ struct NeonSign {
     glm::vec3 scale;
     glm::vec3 color;
     float flickerSpeed;
+    float rotY = 0.0f;
+    float pulsePhase = 0.0f;
+    float pulseDepth = 0.35f;
 };
 
 enum class TrafficPhase { GreenNS, YellowNS, GreenEW, YellowEW };
@@ -213,4 +216,5 @@ private:
     float m_lightning      = 0.0f;
     float m_windowEmissive = 1.5f;
     float m_dayFactor      = 1.0f;
+    float m_timeSec        = 0.0f;
 };
