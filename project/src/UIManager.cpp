@@ -353,7 +353,12 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
     const int colorCount = 23;
 
     ImGui::SetNextWindowBgAlpha(0.98f);
-    ImGui::Begin(u8"Cài đặt", &opts.showMenu, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+    ImVec2 screen = imguiIo.DisplaySize;
+    float menuW = std::min(std::max(screen.x * 0.36f, 360.0f), 560.0f);
+    float menuH = std::min(std::max(screen.y * 0.82f, 520.0f), 760.0f);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(320.0f, 420.0f), ImVec2(screen.x * 0.95f, screen.y * 0.95f));
+    ImGui::SetNextWindowSize(ImVec2(menuW, menuH), ImGuiCond_FirstUseEver);
+    ImGui::Begin(u8"Cài đặt", &opts.showMenu, ImGuiWindowFlags_NoCollapse);
 
     ImGui::SetWindowFontScale(compactMode ? 1.0f : 1.05f);
     ImGui::TextColored(colAccentStrong, u8"CÀI ĐẶT");
@@ -365,12 +370,14 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
     ImGui::Text(u8"FPS: %.0f", static_cast<double>(imguiIo.Framerate));
     ImGui::Separator();
 
-    ImGui::PushItemWidth(260.0f);
+    float contentWidth = ImGui::GetContentRegionAvail().x;
+    float fieldWidth = std::min(260.0f, contentWidth);
+    ImGui::PushItemWidth(fieldWidth);
     ImGui::Combo(u8"Góc máy", &opts.cameraMode, cameraModes, IM_ARRAYSIZE(cameraModes));
     ImGui::PopItemWidth();
     ImGui::Spacing();
 
-    ImGui::PushItemWidth(260.0f);
+    ImGui::PushItemWidth(fieldWidth);
     if (ImGui::InputText(u8"##search", search, sizeof(search))) {
         opts.uiSearch = search;
     }
@@ -380,30 +387,46 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
         search[0] = '\0';
         opts.uiSearch.clear();
     }
-    ImGui::SameLine();
-    ImGui::Checkbox(u8"Yêu thích", &showFavorites);
-    ImGui::SameLine();
-    ImGui::Checkbox(u8"Gọn giao diện", &compactMode);
-    ImGui::SameLine();
-    ImGui::Checkbox(u8"Hiện phím tắt", &showHotkeys);
+    bool narrowLayout = ImGui::GetWindowWidth() < 560.0f;
+    if (narrowLayout) {
+        ImGui::Checkbox(u8"Yêu thích", &showFavorites);
+        ImGui::Checkbox(u8"Gọn giao diện", &compactMode);
+        ImGui::Checkbox(u8"Hiện phím tắt", &showHotkeys);
+    } else {
+        ImGui::SameLine();
+        ImGui::Checkbox(u8"Yêu thích", &showFavorites);
+        ImGui::SameLine();
+        ImGui::Checkbox(u8"Gọn giao diện", &compactMode);
+        ImGui::SameLine();
+        ImGui::Checkbox(u8"Hiện phím tắt", &showHotkeys);
+    }
 
     ImGui::Separator();
     ImGui::TextDisabled(u8"Preset nhanh");
     if (ImGui::Button(u8"Ngày")) applyPreset(UIPreset::Day, opts, scene, camera);
-    ImGui::SameLine();
+    if (!narrowLayout) ImGui::SameLine();
     if (ImGui::Button(u8"Đêm")) applyPreset(UIPreset::Night, opts, scene, camera);
-    ImGui::SameLine();
+    if (!narrowLayout) ImGui::SameLine();
     if (ImGui::Button(u8"Mưa")) applyPreset(UIPreset::Rain, opts, scene, camera);
-    ImGui::SameLine();
+    if (!narrowLayout) ImGui::SameLine();
     if (ImGui::Button(u8"Nắng")) applyPreset(UIPreset::Sunny, opts, scene, camera);
-    ImGui::SameLine();
+    if (!narrowLayout) ImGui::SameLine();
     if (ImGui::Button(u8"Noir")) applyPreset(UIPreset::Noir, opts, scene, camera);
 
     ImGui::Separator();
 
-    ImGui::Columns(2, "SettingsColumns", false);
-    ImGui::SetColumnWidth(0, 185.0f);
-    ImGui::BeginChild("Sidebar", ImVec2(0.0f, 0.0f), true);
+    bool stackLayout = ImGui::GetWindowWidth() < 520.0f;
+    if (!stackLayout) {
+        ImGui::Columns(2, "SettingsColumns", false);
+        float sidebarWidth = std::min(std::max(ImGui::GetWindowWidth() * 0.28f, 180.0f), 240.0f);
+        ImGui::SetColumnWidth(0, sidebarWidth);
+    }
+
+    if (!stackLayout) {
+        ImGui::BeginChild("Sidebar", ImVec2(0.0f, 0.0f), true);
+    } else {
+        ImGui::BeginChild("Sidebar", ImVec2(0.0f, 150.0f), true);
+    }
         ImGui::TextDisabled(u8"NHÓM");
         const char* sections[] = { u8"Môi trường", u8"Ánh sáng", u8"Hậu kỳ", u8"Hệ thống" };
         for (int i = 0; i < 4; ++i) {
@@ -416,7 +439,11 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
         ImGui::TextDisabled(u8"F: lái xe");
     ImGui::EndChild();
 
-    ImGui::NextColumn();
+    if (!stackLayout) {
+        ImGui::NextColumn();
+    } else {
+        ImGui::Separator();
+    }
     ImGui::BeginChild("Content", ImVec2(0.0f, 0.0f), false);
 
         auto show = [&](const char* label, bool pinned) {
@@ -712,7 +739,9 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
         }
 
     ImGui::EndChild();
-    ImGui::Columns(1);
+    if (!stackLayout) {
+        ImGui::Columns(1);
+    }
 
     ImGui::End();
     ImGui::PopStyleColor(colorCount);
