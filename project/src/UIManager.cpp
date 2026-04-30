@@ -225,6 +225,8 @@ void resetSystem(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindow* win
     opts.clearCol[1] = d.clearCol[1];
     opts.clearCol[2] = d.clearCol[2];
 
+    opts.showFpsOverlay = d.showFpsOverlay;
+
     opts.syncTimeOfDay = d.syncTimeOfDay;
     opts.timeOfDayHour = d.timeOfDayHour;
     opts.cameraMode = d.cameraMode;
@@ -255,6 +257,30 @@ void drawHotkeysOverlay(bool show, bool menuOpen, const ImVec4& colBg, const ImV
     ImGui::Text(u8"F: lái xe | Esc: thoát");
     ImGui::End();
 
+    ImGui::PopStyleColor(3);
+}
+
+void drawFpsOverlay(bool show, bool menuOpen, ImGuiIO& io, const ImVec4& colBg, const ImVec4& colAccent, const ImVec4& colText) {
+    if (!show || menuOpen)
+        return;
+    const float dt = io.DeltaTime > 1.0e-6f ? io.DeltaTime : 1.0f / 60.0f;
+    const float ms = dt * 1000.0f;
+    float fpsIo = io.Framerate;
+    if (fpsIo < 1.0f)
+        fpsIo = 1.0f / dt;
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 10.0f, io.DisplaySize.y - 10.0f), ImGuiCond_Always,
+                            ImVec2(1.0f, 1.0f));
+    ImGui::SetNextWindowBgAlpha(0.55f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, colBg);
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(colAccent.x, colAccent.y, colAccent.z, 0.35f));
+    ImGui::PushStyleColor(ImGuiCol_Text, colText);
+    ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNav |
+        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoSavedSettings;
+    ImGui::Begin("##FpsOverlay", nullptr, flags);
+    ImGui::Text(u8"%4.0f FPS   %5.2f ms", fpsIo, ms);
+    ImGui::End();
     ImGui::PopStyleColor(3);
 }
 
@@ -312,6 +338,7 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
     const ImVec4 colTextMuted = ImVec4(0.62f, 0.65f, 0.70f, 1.0f);
 
     drawHotkeysOverlay(showHotkeys, opts.showMenu, colBg, colAccentStrong, colText);
+    drawFpsOverlay(opts.showFpsOverlay, opts.showMenu, imguiIo, colBg, colAccentStrong, colText);
     if (!opts.showMenu) return;
 
     // Theme đậm, tương phản cao cho menu
@@ -751,6 +778,9 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             }
             if (show(u8"VSync", false)) {
                 if (ImGui::Checkbox(u8"VSync", &opts.vsync)) glfwSwapInterval(opts.vsync ? 1 : 0);
+            }
+            if (show(u8"FPS góc màn hình", false)) {
+                ImGui::Checkbox(u8"FPS góc màn hình", &opts.showFpsOverlay);
             }
 
             if (opts.syncTimeOfDay) {

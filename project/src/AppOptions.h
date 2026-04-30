@@ -51,6 +51,8 @@ struct AppOptions {
     bool uiShowFavorites = true;
     bool uiCompact = false;
     bool uiShowHotkeys = true;
+    /// FPS + ms/frame góc màn khi không mở menu (tiện chỉnh hiệu năng)
+    bool showFpsOverlay = true;
     std::array<bool, kUiFavoriteCount> uiFavorites = {true, true, true, false, false, true, false, false, false};
     int uiSection = 0;
     std::string uiSearch;
@@ -99,6 +101,7 @@ inline void saveConfig(const AppOptions& opts, const std::string& path) {
     j["uiShowFavorites"] = opts.uiShowFavorites;
     j["uiCompact"] = opts.uiCompact;
     j["uiShowHotkeys"] = opts.uiShowHotkeys;
+    j["showFpsOverlay"] = opts.showFpsOverlay;
     j["uiFavorites"] = opts.uiFavorites;
     j["uiSection"] = opts.uiSection;
     j["uiSearch"] = opts.uiSearch;
@@ -162,6 +165,7 @@ inline void loadConfig(AppOptions& opts, const std::string& path) {
         if (j.contains("uiShowFavorites")) opts.uiShowFavorites = j["uiShowFavorites"];
         if (j.contains("uiCompact")) opts.uiCompact = j["uiCompact"];
         if (j.contains("uiShowHotkeys")) opts.uiShowHotkeys = j["uiShowHotkeys"];
+        if (j.contains("showFpsOverlay")) opts.showFpsOverlay = j["showFpsOverlay"];
         if (j.contains("uiFavorites") && j["uiFavorites"].is_array()) {
             const auto& arr = j["uiFavorites"];
             const int count = std::min(static_cast<int>(arr.size()), AppOptions::kUiFavoriteCount);

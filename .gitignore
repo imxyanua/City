@@ -5,6 +5,9 @@
 *.VC.db
 *.VC.opendb
 
+# Bản dựng CMake / VS (nhánh khác không nằm trong project/out)
+/build/
+
 # Bản dựng CMake (không commit cây build)
 project/out/
 project/build/
