@@ -54,6 +54,7 @@ set(IMGUI_DIR "${imgui_SOURCE_DIR}")
 
 add_executable(CityStreet
   src/main.cpp
+  src/CameraController.cpp
   src/RenderPipeline.cpp
   src/Shader.cpp
   src/Camera.cpp

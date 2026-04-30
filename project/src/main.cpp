@@ -3,6 +3,7 @@
 #include "Scene.h"
 #include "Shader.h"
 #include "AppOptions.h"
+#include "CameraController.h"
 #include "RainSystem.h"
 #include "PostProcessor.h"
 #include "RenderPipeline.h"
@@ -16,130 +17,15 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
-#include <algorithm>
 #include <cstdio>
 #include <cmath>
+#include <ctime>
 #include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
-#include <ctime>
-
-#include <glm/gtc/matrix_transform.hpp>
 
 namespace {
-
-struct AppContext {
-    Camera* camera = nullptr;
-    Scene* scene = nullptr;
-    AppOptions* opts = nullptr;
-};
-
-struct KeyState {
-    bool w = false, a = false, s = false, d = false;
-    bool space = false, shift = false, f = false;
-    bool firstMouse = true;
-    double lastX = 400.0, lastY = 300.0;
-};
-
-KeyState g_keys;
-float g_deltaTime = 0.0f;
-double g_lastFrame = 0.0;
-
-void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-    auto* ctx = static_cast<AppContext*>(glfwGetWindowUserPointer(window));
-
-    if (key == GLFW_KEY_TAB && action == GLFW_PRESS && ctx && ctx->opts != nullptr) {
-        ctx->opts->showMenu = !(ctx->opts->showMenu);
-        glfwSetInputMode(window, GLFW_CURSOR, ctx->opts->showMenu ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
-        if (!ctx->opts->showMenu) {
-            g_keys.firstMouse = true;
-        }
-        return;
-    }
-
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-        if (ctx && ctx->opts && ctx->opts->showMenu) {
-            ctx->opts->showMenu = false;
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            g_keys.firstMouse = true;
-            return;
-        }
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-        return;
-    }
-
-    if (key == GLFW_KEY_F && action == GLFW_PRESS && ctx && ctx->opts && ctx->scene) {
-        auto& cars = ctx->scene->getCarsRef();
-        if (ctx->opts->cameraMode != 3) {
-            ctx->opts->cameraMode = 3;
-            if (!cars.empty()) cars[0].isPlayerDriven = true;
-        } else {
-            ctx->opts->cameraMode = 0;
-            if (!cars.empty()) cars[0].isPlayerDriven = false;
-        }
-    }
-
-    ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
-
-    const bool down = (action == GLFW_PRESS || action == GLFW_REPEAT);
-    const bool capture = ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard;
-    if (capture) {
-        return;
-    }
-
-    if (key == GLFW_KEY_W) g_keys.w = down;
-    if (key == GLFW_KEY_S) g_keys.s = down;
-    if (key == GLFW_KEY_A) g_keys.a = down;
-    if (key == GLFW_KEY_D) g_keys.d = down;
-    if (key == GLFW_KEY_SPACE) g_keys.space = down;
-    if (key == GLFW_KEY_LEFT_SHIFT || key == GLFW_KEY_RIGHT_SHIFT) g_keys.shift = down;
-}
-
-void mouseCallback(GLFWwindow* window, double x, double y)
-{
-    ImGui_ImplGlfw_CursorPosCallback(window, x, y);
-
-    auto* ctx = static_cast<AppContext*>(glfwGetWindowUserPointer(window));
-    if (!ctx || !ctx->camera) return;
-    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) return;
-    if (ctx->opts && ctx->opts->showMenu) return;
-
-    if (g_keys.firstMouse) {
-        g_keys.lastX = x;
-        g_keys.lastY = y;
-        g_keys.firstMouse = false;
-    }
-    const float xoff = static_cast<float>(x - g_keys.lastX);
-    const float yoff = static_cast<float>(g_keys.lastY - y);
-    g_keys.lastX = x;
-    g_keys.lastY = y;
-
-    if (ctx->opts && ctx->opts->cameraMode == 0) {
-        ctx->camera->processMouseMovement(xoff, yoff);
-    }
-}
-
-void scrollCallback(GLFWwindow* window, double xoff, double yoff)
-{
-    ImGui_ImplGlfw_ScrollCallback(window, xoff, yoff);
-
-    auto* ctx = static_cast<AppContext*>(glfwGetWindowUserPointer(window));
-    if (!ctx || !ctx->camera) return;
-    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) return;
-    
-    ctx->camera->processScroll(static_cast<float>(yoff));
-}
-
-void framebufferSizeCallback(GLFWwindow* window, int width, int height)
-{
-    if (height <= 0) return;
-    auto* ctx = static_cast<AppContext*>(glfwGetWindowUserPointer(window));
-    if (ctx && ctx->scene) {
-        ctx->scene->setAspect(static_cast<float>(width) / static_cast<float>(height));
-    }
-}
 
 std::filesystem::path exeDirectory(const char* argv0)
 {
@@ -225,7 +111,7 @@ int main(int argc, char* argv[])
         std::cerr << "Main shader failed.\n";
         return 1;
     }
-    
+
     Shader rainShader;
     if (!rainShader.loadFromFiles(rainVertPath.string(), rainFragPath.string())) {
         std::cerr << "Rain shader failed.\n";
@@ -274,7 +160,7 @@ int main(int argc, char* argv[])
         std::cerr << "Failed to load city.\n";
         return 1;
     }
-    
+
     const std::filesystem::path assetsDir = exeDir / "assets" / "models";
     std::vector<std::string> carPaths = {
         (assetsDir / "2014_bmw_z4_sdrive35is.glb").string(),
@@ -283,14 +169,18 @@ int main(int argc, char* argv[])
     };
     scene.loadCarModels(carPaths);
 
-    if (opts.useGridLayout)
+    if (opts.useGridLayout) {
         scene.setInstanceTransforms(CityBuilder::buildGrid(opts.gridRows, opts.gridCols, opts.gridSpaceX, opts.gridSpaceZ, 0.0f));
-    else
+    } else {
         scene.setInstanceTransforms({glm::mat4(1.0f)});
+    }
     scene.initTrafficAndPedestrians();
 
     Camera camera(glm::vec3(0.0f, 38.0f, 85.0f), -90.0f, -16.0f);
     camera.setMoveSpeed(25.0f);
+
+    CameraController cameraControl;
+    cameraControl.bind(window, &camera, &scene, &opts);
 
     UIManager uiManager;
     RainSystem rainSystem;
@@ -300,29 +190,18 @@ int main(int argc, char* argv[])
 
     applyTimeOfDayHour(scene, opts.timeOfDayHour, opts.clearCol);
 
-    AppContext ctx;
-    ctx.camera = &camera;
-    ctx.scene = &scene;
-    ctx.opts = &opts;
-    glfwSetWindowUserPointer(window, &ctx);
-
-    glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
-    glfwSetKeyCallback(window, keyCallback);
-    glfwSetCursorPosCallback(window, mouseCallback);
-    glfwSetScrollCallback(window, scrollCallback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     std::cout << u8"Tab: bật/tắt menu | WASD + chuột (khi menu tắt) | Esc: đóng menu / thoát\n";
 
-    g_lastFrame = glfwGetTime();
+    double lastFrame = glfwGetTime();
     while (!glfwWindowShouldClose(window)) {
         const double now = glfwGetTime();
-        g_deltaTime = static_cast<float>(now - g_lastFrame);
-        g_lastFrame = now;
+        const float deltaTime = static_cast<float>(now - lastFrame);
+        lastFrame = now;
 
-        scene.update(g_deltaTime);
-        rainSystem.update(g_deltaTime, camera, opts.rainIntensity, opts.windDir, opts.cloudHeight);
-
+        scene.update(deltaTime);
+        rainSystem.update(deltaTime, camera, opts.rainIntensity, opts.windDir, opts.cloudHeight);
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -341,101 +220,17 @@ int main(int argc, char* argv[])
         }
         applyTimeOfDayHour(scene, opts.timeOfDayHour, opts.clearCol);
 
-        // --- Lightning Storm ---
         float lightningIntensity = 0.0f;
         if (opts.rainIntensity > 0.5f) {
-            float noise = sin(static_cast<float>(now) * 15.0f) * sin(static_cast<float>(now) * 31.0f) * cos(static_cast<float>(now) * 53.0f);
-            if (noise > 0.85f && sin(static_cast<float>(now) * 2.0f) > 0.5f) {
-                lightningIntensity = (noise - 0.85f) * 6.6f; // map 0.85-1.0 to 0-1
+            float noise = std::sin(static_cast<float>(now) * 15.0f) * std::sin(static_cast<float>(now) * 31.0f)
+                        * std::cos(static_cast<float>(now) * 53.0f);
+            if (noise > 0.85f && std::sin(static_cast<float>(now) * 2.0f) > 0.5f) {
+                lightningIntensity = (noise - 0.85f) * 6.6f;
             }
         }
         scene.setLightning(lightningIntensity);
 
-        {
-            static bool menuWas = false;
-            if (menuWas && !opts.showMenu) {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                g_keys.firstMouse = true;
-            }
-            menuWas = opts.showMenu;
-        }
-
-        if (!opts.showMenu || !imguiIo.WantCaptureKeyboard) {
-            if (opts.cameraMode == 0) {
-                if (g_keys.w) camera.processKeyboard(Camera::Forward, g_deltaTime);
-                if (g_keys.s) camera.processKeyboard(Camera::Backward, g_deltaTime);
-                if (g_keys.a) camera.processKeyboard(Camera::Left, g_deltaTime);
-                if (g_keys.d) camera.processKeyboard(Camera::Right, g_deltaTime);
-                if (g_keys.space) camera.processKeyboard(Camera::Up, g_deltaTime);
-                if (g_keys.shift) camera.processKeyboard(Camera::Down, g_deltaTime);
-            }
-        }
-        
-        // --- Auto Camera Modes ---
-        if (opts.cameraMode == 1 || opts.cameraMode == 3) { // Follow Car or Drive
-            auto& cars = scene.getCarsRef();
-            if (!cars.empty()) {
-                auto& car = cars[0]; // Follow the first car
-                
-                if (opts.cameraMode == 3) {
-                    car.isPlayerDriven = true;
-                    if (g_keys.w) car.targetSpeed = 30.0f;
-                    else if (g_keys.s) car.targetSpeed = -15.0f;
-                    else car.targetSpeed = 0.0f;
-
-                    if (std::fabs(car.speed) > 1.0f) {
-                        float steer = 0.0f;
-                        if (g_keys.a) steer = 1.0f;
-                        if (g_keys.d) steer = -1.0f;
-                        float steerMult = (car.speed > 0) ? 1.0f : -1.0f;
-                        car.rotOffset += steer * steerMult * 1.5f * g_deltaTime;
-                        car.dir = glm::vec3(sin(car.rotOffset), 0.0f, cos(car.rotOffset));
-                    }
-                }
-
-                glm::vec3 targetPos = car.pos + glm::vec3(0.0f, 1.5f, 0.0f);
-                glm::vec3 camPos = targetPos - car.dir * 6.0f + glm::vec3(0.0f, 2.5f, 0.0f);
-                
-                // Detect wrap-around teleportation to prevent camera "flying" across the map
-                if (glm::distance(camera.position(), camPos) > 40.0f) {
-                    camera.setPosition(camPos);
-                } else {
-                    camera.setPosition(glm::mix(camera.position(), camPos, g_deltaTime * 5.0f));
-                }
-                
-                glm::vec3 dir = glm::normalize(targetPos - camera.position());
-                float yaw = glm::degrees(atan2(dir.z, dir.x));
-                float pitch = glm::degrees(asin(dir.y));
-                camera.setYawPitch(yaw, pitch);
-            }
-        } else if (opts.cameraMode == 2) { // CCTV
-            glm::vec3 cctvPos = glm::vec3(12.0f, 15.0f, 12.0f);
-            camera.setPosition(glm::mix(camera.position(), cctvPos, g_deltaTime * 2.0f));
-            
-            glm::vec3 targetPos = glm::vec3(0.0f, 0.0f, 0.0f);
-            glm::vec3 dir = glm::normalize(targetPos - camera.position());
-            
-            float yaw = glm::degrees(atan2(dir.z, dir.x));
-            yaw += sin(static_cast<float>(now) * 0.2f) * 15.0f; // Panning
-            float pitch = glm::degrees(asin(dir.y));
-            
-            camera.setYawPitch(yaw, pitch);
-        } else if (opts.cameraMode == 4) { // Cinematic
-            float t = static_cast<float>(now) * 0.15f;
-            float radius = 60.0f + sin(t * 0.8f) * 30.0f;
-            float height = 25.0f + cos(t * 1.3f) * 15.0f;
-            
-            glm::vec3 cinePos = glm::vec3(sin(t) * radius, height, cos(t) * radius);
-            camera.setPosition(glm::mix(camera.position(), cinePos, g_deltaTime * 1.5f));
-            
-            glm::vec3 targetPos = glm::vec3(0.0f, 5.0f, 0.0f); // Look slightly above ground center
-            glm::vec3 dir = glm::normalize(targetPos - camera.position());
-            
-            float yaw = glm::degrees(atan2(dir.z, dir.x));
-            float pitch = glm::degrees(asin(dir.y));
-            
-            camera.setYawPitch(yaw, pitch);
-        }
+        cameraControl.update(window, imguiIo, deltaTime, now);
 
         int fbW = 0, fbH = 0;
         glfwGetFramebufferSize(window, &fbW, &fbH);
