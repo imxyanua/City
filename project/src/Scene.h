@@ -40,16 +40,6 @@ struct Pigeon {
     float flapPhase;
 };
 
-struct NeonSign {
-    glm::vec3 pos;
-    glm::vec3 scale;
-    glm::vec3 color;
-    float flickerSpeed;
-    float rotY = 0.0f;
-    float pulsePhase = 0.0f;
-    float pulseDepth = 0.35f;
-};
-
 enum class TrafficPhase { GreenNS, YellowNS, GreenEW, YellowEW };
 
 struct TrafficLight {
@@ -149,13 +139,11 @@ private:
     void drawTrafficLights(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void drawStreetLamps(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void drawPigeons(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
-    void drawNeonSigns(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void drawStreetProps(Shader& shader, const glm::mat4& world, const glm::vec3& camPos) const;
     void buildPedestrianMeshes();
     void buildTrafficLightMesh();
     void buildStreetLampMesh();
     void buildPigeonMesh();
-    void buildNeonSignMesh();
     void buildStreetPropMeshes();
 
     Model m_cityModel;
@@ -186,9 +174,6 @@ private:
 
     Mesh m_pigeonMesh;
     std::vector<Pigeon> m_pigeons;
-
-    Mesh m_neonSignMesh;
-    std::vector<NeonSign> m_neonSigns;
 
     Mesh m_propTrashCan;
     Mesh m_propBollard;

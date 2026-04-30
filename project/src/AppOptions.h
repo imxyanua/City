@@ -36,6 +36,11 @@ struct AppOptions {
 
     int cameraMode = 0; // 0: Free, 1: Follow Car, 2: CCTV, 3: Drive, 4: Cinematic
 
+    /// Shadow map edge length (pixels). Allowed: 512, 1024, 2048 — lower improves FPS on weak GPUs.
+    int shadowMapResolution = 1024;
+    /// Max rain streaks allocated; active count scales with rain intensity × this cap.
+    int rainMaxDrops = 48000;
+
     bool useGridLayout = false;
     int gridRows = 2;
     int gridCols = 6;
@@ -49,6 +54,18 @@ struct AppOptions {
     int uiSection = 0;
     std::string uiSearch;
 };
+
+inline int sanitizeShadowResolution(int v) {
+    if (v <= 768) return 512;
+    if (v <= 1536) return 1024;
+    return 2048;
+}
+
+inline int sanitizeRainMaxDrops(int v) {
+    constexpr int kMin = 4000;
+    constexpr int kMax = 130000;
+    return std::clamp(v, kMin, kMax);
+}
 
 inline void saveConfig(const AppOptions& opts, const std::string& path) {
     nlohmann::json j;
@@ -65,6 +82,8 @@ inline void saveConfig(const AppOptions& opts, const std::string& path) {
     j["ssaoIntensity"] = opts.ssaoIntensity;
     j["ssrIntensity"] = opts.ssrIntensity;
     j["cameraMode"] = opts.cameraMode;
+    j["shadowMapResolution"] = opts.shadowMapResolution;
+    j["rainMaxDrops"] = opts.rainMaxDrops;
     j["uiShowFavorites"] = opts.uiShowFavorites;
     j["uiCompact"] = opts.uiCompact;
     j["uiShowHotkeys"] = opts.uiShowHotkeys;
@@ -97,6 +116,8 @@ inline void loadConfig(AppOptions& opts, const std::string& path) {
         if (j.contains("ssaoIntensity")) opts.ssaoIntensity = j["ssaoIntensity"];
         if (j.contains("ssrIntensity")) opts.ssrIntensity = j["ssrIntensity"];
         if (j.contains("cameraMode")) opts.cameraMode = j["cameraMode"];
+        if (j.contains("shadowMapResolution")) opts.shadowMapResolution = j["shadowMapResolution"];
+        if (j.contains("rainMaxDrops")) opts.rainMaxDrops = j["rainMaxDrops"];
         if (j.contains("uiShowFavorites")) opts.uiShowFavorites = j["uiShowFavorites"];
         if (j.contains("uiCompact")) opts.uiCompact = j["uiCompact"];
         if (j.contains("uiShowHotkeys")) opts.uiShowHotkeys = j["uiShowHotkeys"];
@@ -114,6 +135,9 @@ inline void loadConfig(AppOptions& opts, const std::string& path) {
             opts.uiSection = s;
         }
         if (j.contains("uiSearch")) opts.uiSearch = j["uiSearch"].get<std::string>();
+
+        opts.shadowMapResolution = sanitizeShadowResolution(opts.shadowMapResolution);
+        opts.rainMaxDrops = sanitizeRainMaxDrops(opts.rainMaxDrops);
     } catch (std::exception& e) {
         std::cerr << "Failed to parse config: " << e.what() << std::endl;
     }

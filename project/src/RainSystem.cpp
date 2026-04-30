@@ -28,6 +28,19 @@ RainSystem::~RainSystem() {
 }
 
 void RainSystem::init(int maxDrops) {
+    if (m_vao != 0) {
+        glDeleteVertexArrays(1, &m_vao);
+        m_vao = 0;
+    }
+    if (m_vbo != 0) {
+        glDeleteBuffers(1, &m_vbo);
+        m_vbo = 0;
+    }
+    if (m_instanceVbo != 0) {
+        glDeleteBuffers(1, &m_instanceVbo);
+        m_instanceVbo = 0;
+    }
+
     m_maxDrops = std::max(0, maxDrops);
     m_activeDrops = 0;
     m_hasCenter = false;

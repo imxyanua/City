@@ -208,6 +208,38 @@ void applyTimeOfDayHour(Scene& scene, float hour, float clearCol[3])
     }
 }
 
+void destroyShadowMap(unsigned int& fbo, unsigned int& depthTex)
+{
+    if (depthTex != 0) {
+        glDeleteTextures(1, &depthTex);
+        depthTex = 0;
+    }
+    if (fbo != 0) {
+        glDeleteFramebuffers(1, &fbo);
+        fbo = 0;
+    }
+}
+
+void recreateShadowMap(int dim, unsigned int& fbo, unsigned int& depthTex)
+{
+    destroyShadowMap(fbo, depthTex);
+    glGenFramebuffers(1, &fbo);
+    glGenTextures(1, &depthTex);
+    glBindTexture(GL_TEXTURE_2D, depthTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, dim, dim, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTex, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 } // namespace
 
 int main(int argc, char* argv[])
@@ -306,25 +338,13 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // --- Shadow Map Setup ---
-    const unsigned int SHADOW_WIDTH = 2048, SHADOW_HEIGHT = 2048;
-    unsigned int depthMapFBO;
-    glGenFramebuffers(1, &depthMapFBO);
-    unsigned int depthMap;
-    glGenTextures(1, &depthMap);
-    glBindTexture(GL_TEXTURE_2D, depthMap);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-    glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    AppOptions opts;
+    loadConfig(opts, (exeDir / "config.json").string());
+
+    unsigned int depthMapFBO = 0;
+    unsigned int depthMap = 0;
+    recreateShadowMap(sanitizeShadowResolution(opts.shadowMapResolution), depthMapFBO, depthMap);
+    opts.shadowMapResolution = sanitizeShadowResolution(opts.shadowMapResolution);
 
     PostProcessor postProcessor;
     if (!postProcessor.init(exeDir.string())) {
@@ -352,11 +372,10 @@ int main(int argc, char* argv[])
     Camera camera(glm::vec3(0.0f, 38.0f, 85.0f), -90.0f, -16.0f);
     camera.setMoveSpeed(25.0f);
 
-    AppOptions opts;
-    loadConfig(opts, (exeDir / "config.json").string());
     UIManager uiManager;
     RainSystem rainSystem;
-    rainSystem.init(100000);
+    rainSystem.init(sanitizeRainMaxDrops(opts.rainMaxDrops));
+    opts.rainMaxDrops = sanitizeRainMaxDrops(opts.rainMaxDrops);
 
 
     applyTimeOfDayHour(scene, opts.timeOfDayHour, opts.clearCol);
@@ -391,6 +410,22 @@ int main(int argc, char* argv[])
 
         uiManager.render(opts, scene, camera, window, imguiIo);
         ImGui::Render();
+
+        const int shadowDim = sanitizeShadowResolution(opts.shadowMapResolution);
+        opts.shadowMapResolution = shadowDim;
+        static int appliedShadowDim = shadowDim;
+        if (shadowDim != appliedShadowDim) {
+            recreateShadowMap(shadowDim, depthMapFBO, depthMap);
+            appliedShadowDim = shadowDim;
+        }
+
+        const int rainCap = sanitizeRainMaxDrops(opts.rainMaxDrops);
+        opts.rainMaxDrops = rainCap;
+        static int appliedRainCap = rainCap;
+        if (rainCap != appliedRainCap) {
+            rainSystem.init(rainCap);
+            appliedRainCap = rainCap;
+        }
 
         if (opts.syncTimeOfDay) {
             std::time_t t = std::time(nullptr);
@@ -508,7 +543,7 @@ int main(int argc, char* argv[])
         lightView = glm::lookAt(lightDir * 50.0f, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
         lightSpaceMatrix = lightProjection * lightView;
 
-        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+        glViewport(0, 0, opts.shadowMapResolution, opts.shadowMapResolution);
         glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
         glClear(GL_DEPTH_BUFFER_BIT);
         glCullFace(GL_FRONT); // Avoid peter panning
@@ -563,6 +598,7 @@ int main(int argc, char* argv[])
 
     saveConfig(opts, (exeDir / "config.json").string());
 
+    destroyShadowMap(depthMapFBO, depthMap);
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;

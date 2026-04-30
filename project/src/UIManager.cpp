@@ -717,6 +717,20 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             }
 
             ImGui::Separator();
+            ImGui::Text(u8"--- Hiệu năng ---");
+            if (show(u8"Độ phân giải bóng đổ", false)) {
+                int si = opts.shadowMapResolution <= 768 ? 0 : (opts.shadowMapResolution >= 1536 ? 2 : 1);
+                const char* shadowItems[] = { u8"512 (nhanh)", u8"1024", u8"2048 (đẹp)" };
+                if (ImGui::Combo(u8"Độ phân giải bóng đổ##shadow", &si, shadowItems, 3))
+                    opts.shadowMapResolution = 512 << si;
+                ImGui::TextDisabled(u8"512 giúp tăng FPS rõ khi máy yếu.");
+            }
+            if (show(u8"Số giọt mưa tối đa", false)) {
+                ImGui::SliderInt(u8"Số giọt mưa tối đa##raincap", &opts.rainMaxDrops, 8000, 120000);
+                ImGui::TextDisabled(u8"Giảm khi FPS thấp; áp ngay không cần khởi động lại.");
+            }
+
+            ImGui::Separator();
             ImGui::Text(u8"--- Hiển thị ---");
             if (show(u8"Khung dây", false)) {
                 if (ImGui::Checkbox(u8"Khung dây", &opts.wireframe)) glPolygonMode(GL_FRONT_AND_BACK, opts.wireframe ? GL_LINE : GL_FILL);
