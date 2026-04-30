@@ -86,6 +86,10 @@ public:
     void setCarYOffset(float y) { m_carYOffset = y; }
     int carCount() const { return (int)m_cars.size(); }
     int carModelCount() const { return (int)m_carModels.size(); }
+    int cityInstanceCount() const { return static_cast<int>(m_instanceTransforms.size()); }
+    int pedestrianCount() const { return static_cast<int>(m_pedestrians.size()); }
+    int pigeonCount() const { return static_cast<int>(m_pigeons.size()); }
+    int trafficLightCount() const { return static_cast<int>(m_trafficLights.size()); }
     const std::vector<Car>& getCars() const { return m_cars; }
     std::vector<Car>& getCarsRef() { return m_cars; }
 

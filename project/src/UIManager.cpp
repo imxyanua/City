@@ -226,6 +226,7 @@ void resetSystem(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindow* win
     opts.clearCol[2] = d.clearCol[2];
 
     opts.showFpsOverlay = d.showFpsOverlay;
+    opts.showDebugStats = d.showDebugStats;
 
     opts.syncTimeOfDay = d.syncTimeOfDay;
     opts.timeOfDayHour = d.timeOfDayHour;
@@ -260,14 +261,23 @@ void drawHotkeysOverlay(bool show, bool menuOpen, const ImVec4& colBg, const ImV
     ImGui::PopStyleColor(3);
 }
 
-void drawFpsOverlay(bool show, bool menuOpen, ImGuiIO& io, const ImVec4& colBg, const ImVec4& colAccent, const ImVec4& colText) {
-    if (!show || menuOpen)
+void drawPerfHud(const AppOptions& opts,
+    bool menuOpen,
+    ImGuiIO& io,
+    const Scene& scene,
+    const ImVec4& colBg,
+    const ImVec4& colAccent,
+    const ImVec4& colText)
+{
+    if ((!opts.showFpsOverlay && !opts.showDebugStats) || menuOpen) {
         return;
+    }
     const float dt = io.DeltaTime > 1.0e-6f ? io.DeltaTime : 1.0f / 60.0f;
     const float ms = dt * 1000.0f;
     float fpsIo = io.Framerate;
-    if (fpsIo < 1.0f)
+    if (fpsIo < 1.0f) {
         fpsIo = 1.0f / dt;
+    }
     ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 10.0f, io.DisplaySize.y - 10.0f), ImGuiCond_Always,
                             ImVec2(1.0f, 1.0f));
     ImGui::SetNextWindowBgAlpha(0.55f);
@@ -278,8 +288,18 @@ void drawFpsOverlay(bool show, bool menuOpen, ImGuiIO& io, const ImVec4& colBg, 
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNav |
         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoSavedSettings;
-    ImGui::Begin("##FpsOverlay", nullptr, flags);
-    ImGui::Text(u8"%4.0f FPS   %5.2f ms", fpsIo, ms);
+    ImGui::Begin("##PerfHud", nullptr, flags);
+    if (opts.showFpsOverlay) {
+        ImGui::Text(u8"%4.0f FPS   %5.2f ms", fpsIo, ms);
+    }
+    if (opts.showDebugStats) {
+        ImGui::Separator();
+        ImGui::Text(u8"Mảnh TP: %d", scene.cityInstanceCount());
+        ImGui::Text(u8"Xe: %d  Model: %d", scene.carCount(), scene.carModelCount());
+        ImGui::Text(u8"Người đi bộ: %d", scene.pedestrianCount());
+        ImGui::Text(u8"Bồ câu: %d  Đèn giao thông: %d", scene.pigeonCount(), scene.trafficLightCount());
+        ImGui::Text(u8"Bóng: %d  Mưa max: %d", opts.shadowMapResolution, opts.rainMaxDrops);
+    }
     ImGui::End();
     ImGui::PopStyleColor(3);
 }
@@ -338,7 +358,7 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
     const ImVec4 colTextMuted = ImVec4(0.62f, 0.65f, 0.70f, 1.0f);
 
     drawHotkeysOverlay(showHotkeys, opts.showMenu, colBg, colAccentStrong, colText);
-    drawFpsOverlay(opts.showFpsOverlay, opts.showMenu, imguiIo, colBg, colAccentStrong, colText);
+    drawPerfHud(opts, opts.showMenu, imguiIo, scene, colBg, colAccentStrong, colText);
     if (!opts.showMenu) return;
 
     // Theme đậm, tương phản cao cho menu
@@ -781,6 +801,9 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             }
             if (show(u8"FPS góc màn hình", false)) {
                 ImGui::Checkbox(u8"FPS góc màn hình", &opts.showFpsOverlay);
+            }
+            if (show(u8"Thống kê scene (debug)", false)) {
+                ImGui::Checkbox(u8"Thống kê scene (debug)", &opts.showDebugStats);
             }
 
             if (opts.syncTimeOfDay) {
