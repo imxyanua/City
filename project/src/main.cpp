@@ -273,7 +273,6 @@ int main(int argc, char* argv[])
     }
 
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
 
     if (!gladLoadGL(glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD\n";
@@ -341,6 +340,15 @@ int main(int argc, char* argv[])
     AppOptions opts;
     loadConfig(opts, (exeDir / "config.json").string());
 
+    glfwSwapInterval(opts.vsync ? 1 : 0);
+    glPolygonMode(GL_FRONT_AND_BACK, opts.wireframe ? GL_LINE : GL_FILL);
+    if (opts.cullBack) {
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+    } else {
+        glDisable(GL_CULL_FACE);
+    }
+
     unsigned int depthMapFBO = 0;
     unsigned int depthMap = 0;
     recreateShadowMap(sanitizeShadowResolution(opts.shadowMapResolution), depthMapFBO, depthMap);
@@ -366,7 +374,10 @@ int main(int argc, char* argv[])
     };
     scene.loadCarModels(carPaths);
 
-    scene.setInstanceTransforms({glm::mat4(1.0f)});
+    if (opts.useGridLayout)
+        scene.setInstanceTransforms(CityBuilder::buildGrid(opts.gridRows, opts.gridCols, opts.gridSpaceX, opts.gridSpaceZ, 0.0f));
+    else
+        scene.setInstanceTransforms({glm::mat4(1.0f)});
     scene.initTrafficAndPedestrians();
 
     Camera camera(glm::vec3(0.0f, 38.0f, 85.0f), -90.0f, -16.0f);

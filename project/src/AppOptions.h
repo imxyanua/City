@@ -5,6 +5,7 @@
 #include <array>
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <string>
 
@@ -69,8 +70,14 @@ inline int sanitizeRainMaxDrops(int v) {
 
 inline void saveConfig(const AppOptions& opts, const std::string& path) {
     nlohmann::json j;
+    j["wireframe"] = opts.wireframe;
+    j["cullBack"] = opts.cullBack;
+    j["vsync"] = opts.vsync;
+    j["clearCol"] = {opts.clearCol[0], opts.clearCol[1], opts.clearCol[2]};
+    j["syncTimeOfDay"] = opts.syncTimeOfDay;
     j["timeOfDayHour"] = opts.timeOfDayHour;
     j["rainIntensity"] = opts.rainIntensity;
+    j["windDir"] = {opts.windDir.x, opts.windDir.y};
     j["cloudHeight"] = opts.cloudHeight;
     j["bloomThreshold"] = opts.bloomThreshold;
     j["bloomIntensity"] = opts.bloomIntensity;
@@ -84,6 +91,11 @@ inline void saveConfig(const AppOptions& opts, const std::string& path) {
     j["cameraMode"] = opts.cameraMode;
     j["shadowMapResolution"] = opts.shadowMapResolution;
     j["rainMaxDrops"] = opts.rainMaxDrops;
+    j["useGridLayout"] = opts.useGridLayout;
+    j["gridRows"] = opts.gridRows;
+    j["gridCols"] = opts.gridCols;
+    j["gridSpaceX"] = opts.gridSpaceX;
+    j["gridSpaceZ"] = opts.gridSpaceZ;
     j["uiShowFavorites"] = opts.uiShowFavorites;
     j["uiCompact"] = opts.uiCompact;
     j["uiShowHotkeys"] = opts.uiShowHotkeys;
@@ -103,8 +115,22 @@ inline void loadConfig(AppOptions& opts, const std::string& path) {
     nlohmann::json j;
     try {
         i >> j;
+        if (j.contains("wireframe")) opts.wireframe = j["wireframe"];
+        if (j.contains("cullBack")) opts.cullBack = j["cullBack"];
+        if (j.contains("vsync")) opts.vsync = j["vsync"];
+        if (j.contains("clearCol") && j["clearCol"].is_array() && j["clearCol"].size() >= 3) {
+            opts.clearCol[0] = j["clearCol"][0].get<float>();
+            opts.clearCol[1] = j["clearCol"][1].get<float>();
+            opts.clearCol[2] = j["clearCol"][2].get<float>();
+        }
+        if (j.contains("syncTimeOfDay")) opts.syncTimeOfDay = j["syncTimeOfDay"];
         if (j.contains("timeOfDayHour")) opts.timeOfDayHour = j["timeOfDayHour"];
         if (j.contains("rainIntensity")) opts.rainIntensity = j["rainIntensity"];
+        if (j.contains("windDir") && j["windDir"].is_array() && j["windDir"].size() >= 2) {
+            glm::vec2 w(j["windDir"][0].get<float>(), j["windDir"][1].get<float>());
+            const float len = glm::length(w);
+            opts.windDir = (len > 1.0e-6f) ? (w / len) : glm::normalize(glm::vec2(-1.0f, -0.2f));
+        }
         if (j.contains("cloudHeight")) opts.cloudHeight = j["cloudHeight"];
         if (j.contains("bloomThreshold")) opts.bloomThreshold = j["bloomThreshold"];
         if (j.contains("bloomIntensity")) opts.bloomIntensity = j["bloomIntensity"];
@@ -115,9 +141,24 @@ inline void loadConfig(AppOptions& opts, const std::string& path) {
         if (j.contains("chromaticAberration")) opts.chromaticAberration = j["chromaticAberration"];
         if (j.contains("ssaoIntensity")) opts.ssaoIntensity = j["ssaoIntensity"];
         if (j.contains("ssrIntensity")) opts.ssrIntensity = j["ssrIntensity"];
-        if (j.contains("cameraMode")) opts.cameraMode = j["cameraMode"];
+        if (j.contains("cameraMode")) {
+            int cm = j["cameraMode"].get<int>();
+            if (cm < 0) cm = 0;
+            if (cm > 4) cm = 4;
+            opts.cameraMode = cm;
+        }
         if (j.contains("shadowMapResolution")) opts.shadowMapResolution = j["shadowMapResolution"];
         if (j.contains("rainMaxDrops")) opts.rainMaxDrops = j["rainMaxDrops"];
+        if (j.contains("useGridLayout")) opts.useGridLayout = j["useGridLayout"];
+        if (j.contains("gridRows")) opts.gridRows = j["gridRows"];
+        if (j.contains("gridCols")) opts.gridCols = j["gridCols"];
+        if (j.contains("gridSpaceX")) opts.gridSpaceX = j["gridSpaceX"];
+        if (j.contains("gridSpaceZ")) opts.gridSpaceZ = j["gridSpaceZ"];
+        if (j.contains("gridRows") || j.contains("gridCols") || j.contains("useGridLayout")
+            || j.contains("gridSpaceX") || j.contains("gridSpaceZ")) {
+            opts.gridRows = std::clamp(opts.gridRows, 1, 10);
+            opts.gridCols = std::clamp(opts.gridCols, 1, 10);
+        }
         if (j.contains("uiShowFavorites")) opts.uiShowFavorites = j["uiShowFavorites"];
         if (j.contains("uiCompact")) opts.uiCompact = j["uiCompact"];
         if (j.contains("uiShowHotkeys")) opts.uiShowHotkeys = j["uiShowHotkeys"];

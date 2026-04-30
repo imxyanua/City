@@ -215,13 +215,21 @@ void resetSystem(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindow* win
     opts.wireframe = d.wireframe;
     glPolygonMode(GL_FRONT_AND_BACK, opts.wireframe ? GL_LINE : GL_FILL);
     opts.cullBack = d.cullBack;
-    if (opts.cullBack) glEnable(GL_CULL_FACE);
-    else glDisable(GL_CULL_FACE);
+    if (opts.cullBack) {
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+    } else glDisable(GL_CULL_FACE);
     opts.vsync = d.vsync;
     if (window) glfwSwapInterval(opts.vsync ? 1 : 0);
     opts.clearCol[0] = d.clearCol[0];
     opts.clearCol[1] = d.clearCol[1];
     opts.clearCol[2] = d.clearCol[2];
+
+    opts.syncTimeOfDay = d.syncTimeOfDay;
+    opts.timeOfDayHour = d.timeOfDayHour;
+    opts.cameraMode = d.cameraMode;
+    opts.shadowMapResolution = sanitizeShadowResolution(d.shadowMapResolution);
+    opts.rainMaxDrops = sanitizeRainMaxDrops(d.rainMaxDrops);
 }
 
 void drawHotkeysOverlay(bool show, bool menuOpen, const ImVec4& colBg, const ImVec4& colAccent, const ImVec4& colText) {
