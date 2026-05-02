@@ -275,19 +275,46 @@ void CameraController::update(GLFWwindow* window, const ImGuiIO& io, float dt, d
 
         m_camera->setYawPitch(yaw, pitch);
     } else if (m_opts->cameraMode == 4) {
-        float t = static_cast<float>(timeSec) * 0.15f;
-        float radius = 60.0f + std::sin(t * 0.8f) * 30.0f;
-        float height = 25.0f + std::cos(t * 1.3f) * 15.0f;
+        if (m_prevCameraMode != 4) {
+            m_cineDampedPos = m_camera->position();
+            m_cineSmYaw = m_camera->yawDegrees();
+            m_cineSmPitch = m_camera->pitchDegrees();
+        }
 
-        glm::vec3 cinePos = glm::vec3(std::sin(t) * radius, height, std::cos(t) * radius);
-        m_camera->setPosition(glm::mix(m_camera->position(), cinePos, dt * 1.5f));
+        // Đường bay orbital nhẹ nhàng + low-pass exponential (ấm, “ảo” chứ không giật)
+        const float t = static_cast<float>(timeSec) * 0.104f;
+        const float radius = 68.0f + std::sin(t * 0.62f) * 26.0f;
+        const float height = 22.0f + std::cos(t * 0.94f) * 12.0f;
+        const glm::vec3 idealPos(std::sin(t) * radius, height, std::cos(t) * radius);
 
-        glm::vec3 targetPos = glm::vec3(0.0f, 5.0f, 0.0f);
-        glm::vec3 dir = glm::normalize(targetPos - m_camera->position());
+        constexpr float tauPos = 1.65f;
+        constexpr float tauRot = 0.62f;
+        const float alphaP = 1.0f - std::exp(-dt / tauPos);
+        const float alphaR = 1.0f - std::exp(-dt / tauRot);
 
-        float yaw = glm::degrees(std::atan2(dir.z, dir.x));
-        float pitch = glm::degrees(std::asin(std::clamp(dir.y, -1.0f, 1.0f)));
+        m_cineDampedPos = glm::mix(m_cineDampedPos, idealPos, std::clamp(alphaP, 0.0f, 1.0f));
+        m_camera->setPosition(m_cineDampedPos);
 
-        m_camera->setYawPitch(yaw, pitch);
+        const glm::vec3 targetPos(0.0f, 6.5f, 0.0f);
+        glm::vec3 dir = targetPos - m_cineDampedPos;
+        const float lenDir = glm::length(dir);
+        if (lenDir > 1.0e-4f) {
+            dir /= lenDir;
+        } else {
+            dir = glm::vec3(0.0f, 0.0f, -1.0f);
+        }
+
+        const float yawIdeal = glm::degrees(std::atan2(dir.z, dir.x));
+        const float pitchIdeal = glm::degrees(std::asin(std::clamp(dir.y, -1.0f, 1.0f)));
+
+        float yawDiff = yawIdeal - m_cineSmYaw;
+        yawDiff -= 360.0f * std::floor((yawDiff + 180.0f) / 360.0f);
+        m_cineSmYaw += yawDiff * std::clamp(alphaR, 0.0f, 1.0f);
+
+        m_cineSmPitch += (pitchIdeal - m_cineSmPitch) * std::clamp(alphaR, 0.0f, 1.0f);
+
+        m_camera->setYawPitch(m_cineSmYaw, m_cineSmPitch);
     }
+
+    m_prevCameraMode = m_opts->cameraMode;
 }

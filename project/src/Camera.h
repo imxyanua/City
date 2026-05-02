@@ -29,6 +29,9 @@ public:
     void setPosition(const glm::vec3& pos) { m_position = pos; }
     void setYawPitch(float yaw, float pitch);
 
+    float yawDegrees() const { return m_yaw; }
+    float pitchDegrees() const { return m_pitch; }
+
     float nearPlane() const { return m_near; }
     float farPlane() const { return m_far; }
 

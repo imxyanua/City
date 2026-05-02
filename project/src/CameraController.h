@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 
 struct AppOptions;
 class Camera;
@@ -34,4 +35,9 @@ private:
     AppOptions* m_opts = nullptr;
     KeyState m_keys;
     bool m_menuWas = false;
+
+    int m_prevCameraMode = -1;
+    glm::vec3 m_cineDampedPos{0.0f};
+    float m_cineSmYaw = 0.0f;
+    float m_cineSmPitch = 0.0f;
 };
