@@ -42,14 +42,17 @@ std::filesystem::path exeDirectory(const char* argv0)
 int main(int argc, char* argv[])
 {
     const std::filesystem::path exeDir = exeDirectory(argc > 0 ? argv[0] : "");
-    const std::filesystem::path assetModel = exeDir / "assets" / "models" / "procedural_city_7.glb";
+    AppOptions opts;
+    loadConfig(opts, (exeDir / "config.json").string());
+    const std::filesystem::path assetModel = exeDir / "assets" / "models" / opts.cityModelFile;
     const std::filesystem::path vertPath = exeDir / "shaders" / "vertex.glsl";
     const std::filesystem::path fragPath = exeDir / "shaders" / "fragment.glsl";
     const std::filesystem::path rainVertPath = exeDir / "shaders" / "rain.vert";
     const std::filesystem::path rainFragPath = exeDir / "shaders" / "rain.frag";
 
     if (!std::filesystem::exists(assetModel)) {
-        std::cerr << "Missing GLB model. Expected:\n  " << assetModel.string() << "\n";
+        std::cerr << "Missing city GLB. Place the file here (or set \"cityModelFile\" in config.json):\n  "
+                  << assetModel.string() << "\n";
         return 1;
     }
 
@@ -62,7 +65,9 @@ int main(int argc, char* argv[])
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(1600, 900, u8"Phố thành phố — procedural_city_7.glb", nullptr, nullptr);
+    std::string winTitle = reinterpret_cast<const char*>(u8"Phố thành phố — ");
+    winTitle += opts.cityModelFile;
+    GLFWwindow* window = glfwCreateWindow(1600, 900, winTitle.c_str(), nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window\n";
         glfwTerminate();
@@ -133,9 +138,6 @@ int main(int argc, char* argv[])
         std::cerr << "Particle shader failed.\n";
         return 1;
     }
-
-    AppOptions opts;
-    loadConfig(opts, (exeDir / "config.json").string());
 
     glfwSwapInterval(opts.vsync ? 1 : 0);
     glPolygonMode(GL_FRONT_AND_BACK, opts.wireframe ? GL_LINE : GL_FILL);

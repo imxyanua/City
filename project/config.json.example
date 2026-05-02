@@ -1,0 +1,6 @@
+{
+  "cityModelFile": "procedural_city_7.glb",
+  "vsync": true,
+  "wireframe": false,
+  "shadowMapResolution": 1024
+}

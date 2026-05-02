@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iomanip>
+#include <cctype>
 #include <iostream>
 #include <string>
 
@@ -58,6 +59,9 @@ struct AppOptions {
     std::array<bool, kUiFavoriteCount> uiFavorites = {true, true, true, false, false, true, false, false, false};
     int uiSection = 0;
     std::string uiSearch;
+
+    /// Only the file name inside `assets/models/` (e.g. procedural_city_7.glb). Set via config.json.
+    std::string cityModelFile = "procedural_city_7.glb";
 };
 
 inline int sanitizeShadowResolution(int v) {
@@ -70,6 +74,24 @@ inline int sanitizeRainMaxDrops(int v) {
     constexpr int kMin = 4000;
     constexpr int kMax = 130000;
     return std::clamp(v, kMin, kMax);
+}
+
+/// Basename only, `.glb` — blocks path separators and `..` for safety.
+inline std::string sanitizeCityGlbFilename(std::string s) {
+    static const char* kDefault = "procedural_city_7.glb";
+    if (s.empty()) return kDefault;
+    for (char c : s) {
+        if (c == '/' || c == '\\') return kDefault;
+    }
+    if (s.find("..") != std::string::npos) return kDefault;
+    const size_t dot = s.find_last_of('.');
+    if (dot == std::string::npos) return kDefault;
+    std::string ext = s.substr(dot);
+    for (char& c : ext) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (ext != ".glb") return kDefault;
+    return s;
 }
 
 inline void saveConfig(const AppOptions& opts, const std::string& path) {
@@ -108,6 +130,7 @@ inline void saveConfig(const AppOptions& opts, const std::string& path) {
     j["uiFavorites"] = opts.uiFavorites;
     j["uiSection"] = opts.uiSection;
     j["uiSearch"] = opts.uiSearch;
+    j["cityModelFile"] = opts.cityModelFile;
 
     std::ofstream o(path);
     if (o.is_open()) {
@@ -184,7 +207,10 @@ inline void loadConfig(AppOptions& opts, const std::string& path) {
             opts.uiSection = s;
         }
         if (j.contains("uiSearch")) opts.uiSearch = j["uiSearch"].get<std::string>();
+        if (j.contains("cityModelFile") && j["cityModelFile"].is_string())
+            opts.cityModelFile = j["cityModelFile"].get<std::string>();
 
+        opts.cityModelFile = sanitizeCityGlbFilename(opts.cityModelFile);
         opts.shadowMapResolution = sanitizeShadowResolution(opts.shadowMapResolution);
         opts.rainMaxDrops = sanitizeRainMaxDrops(opts.rainMaxDrops);
     } catch (std::exception& e) {
