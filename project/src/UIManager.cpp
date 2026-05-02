@@ -251,11 +251,13 @@ void drawHotkeysOverlay(bool show, bool menuOpen, const ImVec4& colBg, const ImV
                              ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoMove |
                              ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings;
     ImGui::Begin("##HotkeysOverlay", nullptr, flags);
-    ImGui::TextColored(colAccent, u8"PHÍM TẮT");
-    ImGui::Text(u8"Tab: mở/đóng menu");
-    ImGui::Text(u8"WASD + Space/Shift: di chuyển");
-    ImGui::Text(u8"Chuột: nhìn | Lăn: zoom");
-    ImGui::Text(u8"F: lái xe | Esc: thoát");
+    ImGui::TextColored(colAccent, u8"PHÍM ĐIỀU KHIỂN");
+    ImGui::Text(u8"Tab: menu  |  WASD / Space Shift  |  Chuột nhìn, lăn zoom");
+    ImGui::Text(u8"F: lái xe  |  Esc: thoát (khi không mở menu)");
+    ImGui::Separator();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(colText.x * 0.92f, colText.y * 0.94f, colText.z, 0.9f));
+    ImGui::TextDisabled(u8"H: tắt nhãn này | Tab: mở menu chỉnh cảnh.");
+    ImGui::PopStyleColor();
     ImGui::End();
 
     ImGui::PopStyleColor(3);
@@ -295,10 +297,10 @@ void drawPerfHud(const AppOptions& opts,
     if (opts.showDebugStats) {
         ImGui::Separator();
         ImGui::Text(u8"Mảnh TP: %d", scene.cityInstanceCount());
-        ImGui::Text(u8"Xe: %d  Model: %d", scene.carCount(), scene.carModelCount());
+        ImGui::Text(u8"Xe: %d | Model: %d", scene.carCount(), scene.carModelCount());
         ImGui::Text(u8"Người đi bộ: %d", scene.pedestrianCount());
-        ImGui::Text(u8"Bồ câu: %d  Đèn giao thông: %d", scene.pigeonCount(), scene.trafficLightCount());
-        ImGui::Text(u8"Bóng: %d  Mưa max: %d", opts.shadowMapResolution, opts.rainMaxDrops);
+        ImGui::Text(u8"Bồ câu: %d | Đèn giao thông: %d", scene.pigeonCount(), scene.trafficLightCount());
+        ImGui::Text(u8"Bóng: %d | Mưa max: %d", opts.shadowMapResolution, opts.rainMaxDrops);
     }
     ImGui::End();
     ImGui::PopStyleColor(3);
@@ -312,7 +314,7 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
 
     int& section = opts.uiSection;
     if (section < 0) section = 0;
-    if (section > 3) section = 3;
+    if (section > 4) section = 4;
 
     if (!searchInit) {
         std::snprintf(search, sizeof(search), "%s", opts.uiSearch.c_str());
@@ -347,13 +349,13 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
         u8"Quay phim (Cinematic)"
     };
 
-    const ImVec4 colBg = ImVec4(0.06f, 0.07f, 0.08f, 0.98f);
-    const ImVec4 colPanel = ImVec4(0.12f, 0.13f, 0.15f, 1.0f);
-    const ImVec4 colPanelHover = ImVec4(0.18f, 0.19f, 0.22f, 1.0f);
-    const ImVec4 colPanelActive = ImVec4(0.22f, 0.24f, 0.28f, 1.0f);
-    const ImVec4 colAccent = ImVec4(0.20f, 0.78f, 0.68f, 1.0f);
-    const ImVec4 colAccentStrong = ImVec4(0.23f, 0.86f, 0.74f, 1.0f);
-    const ImVec4 colBorder = ImVec4(0.20f, 0.22f, 0.26f, 1.0f);
+    const ImVec4 colBg = ImVec4(0.05f, 0.07f, 0.12f, 0.99f);
+    const ImVec4 colPanel = ImVec4(0.10f, 0.13f, 0.20f, 1.0f);
+    const ImVec4 colPanelHover = ImVec4(0.14f, 0.18f, 0.28f, 1.0f);
+    const ImVec4 colPanelActive = ImVec4(0.18f, 0.24f, 0.36f, 1.0f);
+    const ImVec4 colAccent = ImVec4(0.45f, 0.72f, 1.0f, 1.0f);
+    const ImVec4 colAccentStrong = ImVec4(0.55f, 0.82f, 1.0f, 1.0f);
+    const ImVec4 colBorder = ImVec4(0.22f, 0.28f, 0.42f, 1.0f);
     const ImVec4 colText = ImVec4(0.93f, 0.94f, 0.96f, 1.0f);
     const ImVec4 colTextMuted = ImVec4(0.62f, 0.65f, 0.70f, 1.0f);
 
@@ -413,20 +415,19 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
     float menuH = std::min(std::max(screen.y * 0.82f, 520.0f), 760.0f);
     ImGui::SetNextWindowSizeConstraints(ImVec2(320.0f, 420.0f), ImVec2(screen.x * 0.95f, screen.y * 0.95f));
     ImGui::SetNextWindowSize(ImVec2(menuW, menuH), ImGuiCond_FirstUseEver);
-    ImGui::Begin(u8"Cài đặt", &opts.showMenu, ImGuiWindowFlags_NoCollapse);
+    ImGui::Begin(u8"Điều khiển đồ họa | KTĐHMT", &opts.showMenu, ImGuiWindowFlags_NoCollapse);
 
-    ImGui::SetWindowFontScale(compactMode ? 1.0f : 1.05f);
-    ImGui::TextColored(colAccentStrong, u8"CÀI ĐẶT");
-    ImGui::SameLine();
-    ImGui::TextDisabled(u8"Tab: đóng/mở menu • Esc: thoát");
-    ImGui::SetWindowFontScale(1.0f);
+    ImGui::TextDisabled(u8"Preset = áp nhanh bộ thông số. Nút nhóm = khu vực chỉnh (bên dưới).");
 
     ImGui::Spacing();
     ImGui::Text(u8"FPS: %.0f", static_cast<double>(imguiIo.Framerate));
+    ImGui::SameLine();
+    ImGui::TextDisabled(u8"Tab: menu | Esc: thoát | H: phím nóng");
+
     ImGui::Separator();
 
     float contentWidth = ImGui::GetContentRegionAvail().x;
-    float fieldWidth = std::min(260.0f, contentWidth);
+    float fieldWidth = std::min(280.0f, contentWidth);
     ImGui::PushItemWidth(fieldWidth);
     ImGui::Combo(u8"Góc máy", &opts.cameraMode, cameraModes, IM_ARRAYSIZE(cameraModes));
     ImGui::PopItemWidth();
@@ -469,36 +470,30 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
     if (ImGui::Button(u8"Noir")) applyPreset(UIPreset::Noir, opts, scene, camera);
 
     ImGui::Separator();
-
-    bool stackLayout = ImGui::GetWindowWidth() < 520.0f;
-    if (!stackLayout) {
-        ImGui::Columns(2, "SettingsColumns", false);
-        float sidebarWidth = std::min(std::max(ImGui::GetWindowWidth() * 0.28f, 180.0f), 240.0f);
-        ImGui::SetColumnWidth(0, sidebarWidth);
-    }
-
-    if (!stackLayout) {
-        ImGui::BeginChild("Sidebar", ImVec2(0.0f, 0.0f), true);
-    } else {
-        ImGui::BeginChild("Sidebar", ImVec2(0.0f, 150.0f), true);
-    }
-        ImGui::TextDisabled(u8"NHÓM");
-        const char* sections[] = { u8"Môi trường", u8"Ánh sáng", u8"Hậu kỳ", u8"Hệ thống" };
-        for (int i = 0; i < 4; ++i) {
-            if (ImGui::Selectable(sections[i], section == i)) section = i;
+    ImGui::TextDisabled(u8"Nhóm chức năng");
+    static constexpr int kUiSectionCount = 5;
+    static const char* secTabNames[] = {
+        u8"Tổng quan",
+        u8"Môi trường",
+        u8"Ánh sáng",
+        u8"Hậu kỳ",
+        u8"GPU / Scene",
+    };
+    const float tabPad = narrowLayout ? 4.0f : 6.0f;
+    for (int ti = 0; ti < kUiSectionCount; ++ti) {
+        if (ti > 0) ImGui::SameLine(0.0f, tabPad);
+        const bool sel = (section == ti);
+        if (sel) {
+            ImGui::PushStyleColor(ImGuiCol_Button, colPanelActive);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colPanelActive);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, colPanelActive);
+            ImGui::PushStyleColor(ImGuiCol_Text, colAccentStrong);
         }
-        ImGui::Separator();
-        ImGui::TextDisabled(u8"PHÍM TẮT");
-        ImGui::TextDisabled(u8"Tab: menu");
-        ImGui::TextDisabled(u8"WASD: di chuyển");
-        ImGui::TextDisabled(u8"F: lái xe");
-    ImGui::EndChild();
-
-    if (!stackLayout) {
-        ImGui::NextColumn();
-    } else {
-        ImGui::Separator();
+        if (ImGui::Button(secTabNames[ti])) section = ti;
+        if (sel) ImGui::PopStyleColor(4);
     }
+    ImGui::Spacing();
+
     ImGui::BeginChild("Content", ImVec2(0.0f, 0.0f), false);
 
         auto show = [&](const char* label, bool pinned) {
@@ -513,9 +508,9 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             if (favorites[FavTime]) {
                 ImGui::Checkbox(u8"Đồng bộ thời gian thực##fav_time_sync", &opts.syncTimeOfDay);
                 if (opts.syncTimeOfDay) {
-                    ImGui::TextDisabled(u8"Giờ (0–24): %.2f", opts.timeOfDayHour);
+                    ImGui::TextDisabled(u8"Giờ (0-24): %.2f", opts.timeOfDayHour);
                 } else {
-                    if (ImGui::SliderFloat(u8"Giờ (0–24)##fav_time", &opts.timeOfDayHour, 0.0f, 24.0f, "%.2f")) {
+                    if (ImGui::SliderFloat(u8"Giờ (0-24)##fav_time", &opts.timeOfDayHour, 0.0f, 24.0f, "%.2f")) {
                         (void)opts.timeOfDayHour;
                     }
                 }
@@ -576,6 +571,16 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
         }
 
         if (section == 0) {
+            ImGui::TextColored(colAccentStrong, u8"Tổng quan | mỗi nút nhóm là gì");
+            ImGui::Separator();
+            ImGui::BulletText(u8"Tổng quan: trang này | chỉ mô tả các nút.");
+            ImGui::BulletText(u8"Môi trường: giờ trong ngày, sương, mưa, mây, gió.");
+            ImGui::BulletText(u8"Ánh sáng: phơi sáng, màu trời/đất/nắng, hướng sáng.");
+            ImGui::BulletText(u8"Hậu kỳ: bloom, FXAA, SSAO, SSR, vignette, v.v.");
+            ImGui::BulletText(u8"GPU / Scene: xe, camera, lưới bản sao, bóng, FPS, wireframe, VSync.");
+        }
+
+        if (section == 1) {
             ImGui::TextColored(colAccentStrong, u8"Môi trường");
             ImGui::SameLine();
             if (ImGui::Button(u8"Đặt lại nhóm")) resetEnvironment(opts, scene);
@@ -586,11 +591,11 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
                 ImGui::SameLine();
                 ImGui::Checkbox(u8"Ghim##time", &favorites[FavTime]);
             }
-            if (show(u8"Giờ (0–24)", favorites[FavTime])) {
+            if (show(u8"Giờ (0-24)", favorites[FavTime])) {
                 if (opts.syncTimeOfDay) {
-                    ImGui::TextDisabled(u8"Giờ (0–24): %.2f", opts.timeOfDayHour);
+                    ImGui::TextDisabled(u8"Giờ (0-24): %.2f", opts.timeOfDayHour);
                 } else {
-                    ImGui::SliderFloat(u8"Giờ (0–24)", &opts.timeOfDayHour, 0.0f, 24.0f, "%.2f");
+                    ImGui::SliderFloat(u8"Giờ (0-24)", &opts.timeOfDayHour, 0.0f, 24.0f, "%.2f");
                 }
                 char tbuf[8];
                 formatHourVi(opts.timeOfDayHour, tbuf, sizeof(tbuf));
@@ -618,7 +623,7 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             }
 
             ImGui::Separator();
-            ImGui::Text(u8"--- Mưa & Ướt ---");
+            ImGui::Text(u8"--- Mưa | Ướt ---");
             if (show(u8"Cường độ mưa", favorites[FavRain])) {
                 if (ImGui::SliderFloat(u8"Cường độ mưa", &opts.rainIntensity, 0.0f, 1.0f)) scene.setWetness(opts.rainIntensity);
                 ImGui::SameLine();
@@ -637,7 +642,7 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             }
         }
 
-        if (section == 1) {
+        if (section == 2) {
             ImGui::TextColored(colAccentStrong, u8"Ánh sáng");
             ImGui::SameLine();
             if (ImGui::Button(u8"Đặt lại nhóm")) resetLighting(scene);
@@ -682,7 +687,7 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             }
         }
 
-        if (section == 2) {
+        if (section == 3) {
             ImGui::TextColored(colAccentStrong, u8"Hậu kỳ");
             ImGui::SameLine();
             if (ImGui::Button(u8"Đặt lại nhóm")) resetPost(opts);
@@ -699,23 +704,23 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
             if (show(u8"Vignette (Viền tối)", false)) ImGui::SliderFloat(u8"Vignette (Viền tối)", &opts.vignetteIntensity, 0.0f, 1.0f);
 
             ImGui::Separator();
-            ImGui::Text(u8"--- Khử răng cưa & Ống kính ---");
+            ImGui::Text(u8"--- Khử răng cưa | Ống kính ---");
             if (show(u8"FXAA (Anti-aliasing)", false)) ImGui::SliderFloat(u8"FXAA (Anti-aliasing)", &opts.fxaaIntensity, 0.0f, 1.0f);
             if (show(u8"Chromatic Aberration", false)) ImGui::SliderFloat(u8"Chromatic Aberration", &opts.chromaticAberration, 0.0f, 0.05f, "%.3f");
 
             ImGui::Separator();
-            ImGui::Text(u8"--- Chiều sâu & Phản chiếu ---");
+            ImGui::Text(u8"--- Chiều sâu | Phản chiếu ---");
             if (show(u8"SSAO (Ambient Occlusion)", false)) ImGui::SliderFloat(u8"SSAO (Ambient Occlusion)", &opts.ssaoIntensity, 0.0f, 2.0f);
             if (show(u8"SSR (Phản chiếu mưa)", false)) ImGui::SliderFloat(u8"SSR (Phản chiếu mưa)", &opts.ssrIntensity, 0.0f, 1.5f);
         }
 
-        if (section == 3) {
-            ImGui::TextColored(colAccentStrong, u8"Hệ thống");
+        if (section == 4) {
+            ImGui::TextColored(colAccentStrong, u8"GPU / Scene");
             ImGui::SameLine();
             if (ImGui::Button(u8"Đặt lại nhóm")) resetSystem(opts, scene, camera, window);
             ImGui::Separator();
 
-            ImGui::Text(u8"--- Xe & Giao thông ---");
+            ImGui::Text(u8"--- Xe | Giao thông ---");
             ImGui::Text(u8"Model xe: %d | Xe trên đường: %d", scene.carModelCount(), scene.carCount());
             if (show(u8"Chỉ hiển thị xe (Debug View)", false)) {
                 ImGui::Checkbox(u8"Chỉ hiển thị xe (Debug View)", &scene.m_debugDrawCarOnly);
@@ -814,9 +819,6 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
         }
 
     ImGui::EndChild();
-    if (!stackLayout) {
-        ImGui::Columns(1);
-    }
 
     ImGui::End();
     ImGui::PopStyleColor(colorCount);

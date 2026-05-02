@@ -65,7 +65,7 @@ int main(int argc, char* argv[])
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    std::string winTitle = reinterpret_cast<const char*>(u8"Phố thành phố — ");
+    std::string winTitle = reinterpret_cast<const char*>(u8"Phố thành phố | ");
     winTitle += opts.cityModelFile;
     GLFWwindow* window = glfwCreateWindow(1600, 900, winTitle.c_str(), nullptr, nullptr);
     if (!window) {

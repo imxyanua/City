@@ -1,6 +1,6 @@
 # City
 
-Thiết kế dãy phố — ứng dụng **OpenGL 3.3** (C++17) xem cảnh `procedural_city_7.glb`, có menu **Dear ImGui** (tiếng Việt), thời gian trong ngày, sương mù và mưa (hậu kỳ).
+Thiết kế dãy phố — ứng dụng **OpenGL 3.3** (C++17), menu **ImGui**: preset + **năm nút nhóm** (tổng quan / môi trường / ánh sáng / hậu kỳ / GPU–scene), thời gian trong ngày, sương mù và mưa.
 
 Mã nguồn và CMake nằm trong thư mục [`project/`](project/). Build và chạy: [`project/BUILD.md`](project/BUILD.md).
 

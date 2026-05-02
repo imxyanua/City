@@ -203,7 +203,7 @@ inline void loadConfig(AppOptions& opts, const std::string& path) {
         if (j.contains("uiSection")) {
             int s = j["uiSection"].get<int>();
             if (s < 0) s = 0;
-            if (s > 3) s = 3;
+            if (s > 4) s = 4;
             opts.uiSection = s;
         }
         if (j.contains("uiSearch")) opts.uiSearch = j["uiSearch"].get<std::string>();
