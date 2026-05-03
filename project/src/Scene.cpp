@@ -13,6 +13,76 @@ static constexpr float CITY_HALF = 150.0f;
 static constexpr float STOP_DIST = 14.0f;
 static constexpr float CAR_SCALE = 100.0f;  // The GLB car models are extremely tiny (0.05 units long)
 
+static float rand01() {
+    return static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
+}
+
+static float randRange(float a, float b) {
+    return a + (b - a) * rand01();
+}
+
+static void respawnAICarToLane(Car& c) {
+    constexpr float lanePos = 3.0f;
+    constexpr float spawnPad = 12.0f;
+
+    if (std::abs(c.dir.z) > 0.5f) {
+        // NS traffic: +Z on x=-3, -Z on x=+3
+        c.pos.x = (c.dir.z > 0.0f) ? -lanePos : lanePos;
+        c.pos.z = (c.dir.z > 0.0f)
+            ? (-CITY_HALF + spawnPad + randRange(0.0f, 12.0f))
+            : ( CITY_HALF - spawnPad - randRange(0.0f, 12.0f));
+    } else {
+        // EW traffic: +X on z=-3, -X on z=+3
+        c.pos.z = (c.dir.x > 0.0f) ? -lanePos : lanePos;
+        c.pos.x = (c.dir.x > 0.0f)
+            ? (-CITY_HALF + spawnPad + randRange(0.0f, 12.0f))
+            : ( CITY_HALF - spawnPad - randRange(0.0f, 12.0f));
+    }
+    c.speed = std::max(3.0f, c.targetSpeed * randRange(0.7f, 1.0f));
+    c.stopped = false;
+}
+
+static bool isAICarOutOfPlayableArea(const Car& c) {
+    constexpr float maxWorld = CITY_HALF - 6.0f;
+    constexpr float maxLaneDrift = 5.0f;
+    if (std::abs(c.pos.x) > maxWorld || std::abs(c.pos.z) > maxWorld) return true;
+
+    if (std::abs(c.dir.z) > 0.5f) {
+        const float expectedX = (c.dir.z > 0.0f) ? -3.0f : 3.0f;
+        return std::abs(c.pos.x - expectedX) > maxLaneDrift;
+    }
+    const float expectedZ = (c.dir.x > 0.0f) ? -3.0f : 3.0f;
+    return std::abs(c.pos.z - expectedZ) > maxLaneDrift;
+}
+
+static void respawnPedestrianOnSidewalk(Pedestrian& pd) {
+    const bool alongZ = (std::rand() % 2) == 0;
+    if (alongZ) {
+        pd.pos = glm::vec3((std::rand() % 2 == 0) ? -7.0f : 7.0f, 0.0f, randRange(-140.0f, 140.0f));
+        pd.dir = glm::vec3(0.0f, 0.0f, (std::rand() % 2 == 0) ? 1.0f : -1.0f);
+    } else {
+        pd.pos = glm::vec3(randRange(-140.0f, 140.0f), 0.0f, (std::rand() % 2 == 0) ? -7.0f : 7.0f);
+        pd.dir = glm::vec3((std::rand() % 2 == 0) ? 1.0f : -1.0f, 0.0f, 0.0f);
+    }
+    pd.speed = randRange(0.8f, 1.7f);
+    pd.walkCycle = randRange(0.0f, 100.0f);
+}
+
+static bool isPedestrianOutOfPlayableArea(const Pedestrian& pd) {
+    constexpr float maxWorld = CITY_HALF - 6.0f;
+    constexpr float maxSidewalkDrift = 3.0f;
+    if (std::abs(pd.pos.x) > maxWorld || std::abs(pd.pos.z) > maxWorld) return true;
+
+    // Allow crossing region near the main intersection only.
+    const bool inCrossingZone = (std::abs(pd.pos.x) < 10.0f && std::abs(pd.pos.z) < 10.0f);
+    if (inCrossingZone) return false;
+
+    if (std::abs(pd.dir.z) > 0.5f) {
+        return std::abs(std::abs(pd.pos.x) - 7.0f) > maxSidewalkDrift;
+    }
+    return std::abs(std::abs(pd.pos.z) - 7.0f) > maxSidewalkDrift;
+}
+
 bool Scene::loadCityModel(const std::string& glbPath) {
     if (!m_cityModel.loadFromGLB(glbPath)) {
         std::cerr << "[Scene] Failed to load GLB: " << glbPath << "\n";
@@ -525,8 +595,12 @@ void Scene::update(float dt) {
 
                 if (isNS) {
                     if (std::abs(c.pos.x - other.pos.x) > 1.5f) continue;
+                    // Coarse range gate: only care cars in a small Z window on same lane.
+                    if (std::abs(c.pos.z - other.pos.z) > 25.0f) continue;
                 } else {
                     if (std::abs(c.pos.z - other.pos.z) > 1.5f) continue;
+                    // Coarse range gate: only care cars in a small X window on same lane.
+                    if (std::abs(c.pos.x - other.pos.x) > 25.0f) continue;
                 }
 
                 glm::vec3 toOther = other.pos - c.pos;
@@ -559,10 +633,10 @@ void Scene::update(float dt) {
         }
 
         c.pos += c.dir * (c.speed * dt);
-        if (c.pos.x > CITY_HALF) c.pos.x -= 2*CITY_HALF;
-        if (c.pos.x < -CITY_HALF) c.pos.x += 2*CITY_HALF;
-        if (c.pos.z > CITY_HALF) c.pos.z -= 2*CITY_HALF;
-        if (c.pos.z < -CITY_HALF) c.pos.z += 2*CITY_HALF;
+        if (isAICarOutOfPlayableArea(c)) {
+            respawnAICarToLane(c);
+            continue;
+        }
 
         // Emit particles
         if (std::abs(c.speed) > 2.0f && m_wetness > 0.1f) {
@@ -609,10 +683,9 @@ void Scene::update(float dt) {
             pd.pos += pd.dir * (pd.speed * dt);
             pd.walkCycle += dt * pd.speed * 2.0f;
         }
-        if (pd.pos.x > CITY_HALF) pd.pos.x -= 2*CITY_HALF;
-        if (pd.pos.x < -CITY_HALF) pd.pos.x += 2*CITY_HALF;
-        if (pd.pos.z > CITY_HALF) pd.pos.z -= 2*CITY_HALF;
-        if (pd.pos.z < -CITY_HALF) pd.pos.z += 2*CITY_HALF;
+        if (isPedestrianOutOfPlayableArea(pd)) {
+            respawnPedestrianOnSidewalk(pd);
+        }
     }
 
     // --- Pigeons Update ---
