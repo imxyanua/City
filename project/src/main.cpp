@@ -20,8 +20,11 @@
 #include <cstdio>
 #include <cmath>
 #include <ctime>
+#include <fstream>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -35,6 +38,35 @@ std::filesystem::path exeDirectory(const char* argv0)
         return p.parent_path();
     }
     return std::filesystem::current_path();
+}
+
+std::string screenshotTimestamp()
+{
+    std::time_t t = std::time(nullptr);
+    std::tm tmLocal {};
+    localtime_s(&tmLocal, &t);
+    std::ostringstream oss;
+    oss << std::put_time(&tmLocal, "%Y%m%d-%H%M%S");
+    return oss.str();
+}
+
+bool saveFramebufferPpm(const std::filesystem::path& outPath, int width, int height)
+{
+    if (width <= 0 || height <= 0) return false;
+    std::vector<unsigned char> pixels(static_cast<size_t>(width) * static_cast<size_t>(height) * 3u);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    if (glGetError() != GL_NO_ERROR) return false;
+
+    std::ofstream out(outPath, std::ios::binary);
+    if (!out.is_open()) return false;
+
+    out << "P6\n" << width << " " << height << "\n255\n";
+    for (int y = height - 1; y >= 0; --y) {
+        const unsigned char* row = pixels.data() + static_cast<size_t>(y) * static_cast<size_t>(width) * 3u;
+        out.write(reinterpret_cast<const char*>(row), static_cast<std::streamsize>(width * 3));
+    }
+    return out.good();
 }
 
 } // namespace
@@ -194,9 +226,10 @@ int main(int argc, char* argv[])
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    std::cout << u8"Tab: bật/tắt menu | WASD + chuột (khi menu tắt) | Esc: đóng menu / thoát\n";
+    std::cout << u8"Tab: bật/tắt menu | WASD + chuột (khi menu tắt) | F12: chụp ảnh | Esc: đóng menu / thoát\n";
 
     double lastFrame = glfwGetTime();
+    bool prevShotKey = false;
     while (!glfwWindowShouldClose(window)) {
         const double now = glfwGetTime();
         const float deltaTime = static_cast<float>(now - lastFrame);
@@ -251,6 +284,21 @@ int main(int argc, char* argv[])
             fbH);
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        const bool shotNow = glfwGetKey(window, GLFW_KEY_F12) == GLFW_PRESS;
+        const bool triggerShot = shotNow && !prevShotKey;
+        prevShotKey = shotNow;
+        if (triggerShot) {
+            std::error_code ec;
+            const std::filesystem::path shotDir = exeDir / "screenshots";
+            std::filesystem::create_directories(shotDir, ec);
+            const std::filesystem::path shotPath = shotDir / ("city-" + screenshotTimestamp() + ".ppm");
+            if (saveFramebufferPpm(shotPath, fbW, fbH)) {
+                std::cout << "Saved screenshot: " << shotPath.string() << "\n";
+            } else {
+                std::cerr << "Screenshot failed.\n";
+            }
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();

@@ -45,6 +45,12 @@ enum class UIPreset {
     Noir
 };
 
+enum class QualityPreset {
+    Performance,
+    Balanced,
+    Quality
+};
+
 void applyPreset(UIPreset preset, AppOptions& opts, Scene& scene, Camera& camera) {
     (void)camera;
     if (preset == UIPreset::Day) {
@@ -154,6 +160,42 @@ void applyPreset(UIPreset preset, AppOptions& opts, Scene& scene, Camera& camera
     }
 }
 
+void applyQualityPreset(QualityPreset preset, AppOptions& opts, Scene& scene) {
+    AppOptions d;
+    if (preset == QualityPreset::Performance) {
+        opts.shadowMapResolution = 512;
+        opts.rainMaxDrops = 18000;
+        opts.bloomIntensity = 0.25f;
+        opts.godRayIntensity = 0.15f;
+        opts.fxaaIntensity = 0.65f;
+        opts.ssaoIntensity = 0.45f;
+        opts.ssrIntensity = 0.2f;
+        scene.setFogDensity(std::min(scene.fogDensity(), 0.2f));
+        scene.setWindowEmissive(std::min(scene.windowEmissive(), 2.2f));
+    }
+    if (preset == QualityPreset::Balanced) {
+        opts.shadowMapResolution = sanitizeShadowResolution(d.shadowMapResolution);
+        opts.rainMaxDrops = sanitizeRainMaxDrops(d.rainMaxDrops);
+        opts.bloomIntensity = d.bloomIntensity;
+        opts.godRayIntensity = d.godRayIntensity;
+        opts.fxaaIntensity = d.fxaaIntensity;
+        opts.ssaoIntensity = d.ssaoIntensity;
+        opts.ssrIntensity = d.ssrIntensity;
+    }
+    if (preset == QualityPreset::Quality) {
+        opts.shadowMapResolution = 2048;
+        opts.rainMaxDrops = 92000;
+        opts.bloomIntensity = 0.7f;
+        opts.godRayIntensity = 0.65f;
+        opts.fxaaIntensity = 1.0f;
+        opts.ssaoIntensity = 1.3f;
+        opts.ssrIntensity = 1.1f;
+        scene.setWindowEmissive(std::max(scene.windowEmissive(), 2.0f));
+    }
+    opts.shadowMapResolution = sanitizeShadowResolution(opts.shadowMapResolution);
+    opts.rainMaxDrops = sanitizeRainMaxDrops(opts.rainMaxDrops);
+}
+
 void resetEnvironment(AppOptions& opts, Scene& scene) {
     AppOptions d;
     opts.syncTimeOfDay = d.syncTimeOfDay;
@@ -253,7 +295,7 @@ void drawHotkeysOverlay(bool show, bool menuOpen, const ImVec4& colBg, const ImV
     ImGui::Begin("##HotkeysOverlay", nullptr, flags);
     ImGui::TextColored(colAccent, u8"PHÍM ĐIỀU KHIỂN");
     ImGui::Text(u8"Tab: menu  |  WASD / Space Shift  |  Chuột nhìn, lăn zoom");
-    ImGui::Text(u8"F: lái xe  |  Esc: thoát (khi không mở menu)");
+    ImGui::Text(u8"F: lái xe  |  F12: chụp ảnh  |  Esc: thoát");
     ImGui::Separator();
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(colText.x * 0.92f, colText.y * 0.94f, colText.z, 0.9f));
     ImGui::TextDisabled(u8"H: tắt nhãn này | Tab: mở menu chỉnh cảnh.");
@@ -468,6 +510,13 @@ void UIManager::render(AppOptions& opts, Scene& scene, Camera& camera, GLFWwindo
     if (ImGui::Button(u8"Nắng")) applyPreset(UIPreset::Sunny, opts, scene, camera);
     if (!narrowLayout) ImGui::SameLine();
     if (ImGui::Button(u8"Noir")) applyPreset(UIPreset::Noir, opts, scene, camera);
+    ImGui::Spacing();
+    ImGui::TextDisabled(u8"Chất lượng");
+    if (ImGui::Button(u8"Performance")) applyQualityPreset(QualityPreset::Performance, opts, scene);
+    if (!narrowLayout) ImGui::SameLine();
+    if (ImGui::Button(u8"Balanced")) applyQualityPreset(QualityPreset::Balanced, opts, scene);
+    if (!narrowLayout) ImGui::SameLine();
+    if (ImGui::Button(u8"Quality")) applyQualityPreset(QualityPreset::Quality, opts, scene);
 
     ImGui::Separator();
     ImGui::TextDisabled(u8"Nhóm chức năng");

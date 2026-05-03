@@ -30,6 +30,11 @@ Chạy (đường dẫn tương đối từ `City`):
 .\build\Release\CityStreet.exe
 ```
 
+Phím nhanh trong demo:
+
+- `Tab`: bật/tắt menu
+- `F12`: chụp ảnh màn hình (lưu vào `build/<config>/screenshots/`)
+
 Sau build, exe dùng: **`build/Release/assets/models/`** (bản copy từ `project/assets/`). Luôn sửa/ thêm GLB trong **`project/assets/models/`** rồi **build lại** (hoặc copy tay vào output nếu bạn chỉ đổi model).
 
 ### Debug trong VS Code / Cursor
